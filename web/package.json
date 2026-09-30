@@ -1,0 +1,16 @@
+{
+  "name": "tally",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "tsc",
+    "test": "node test/auth.test.ts && node test/voice.test.ts"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260930.1",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.144.0"
+  }
+}

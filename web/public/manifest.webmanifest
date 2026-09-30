@@ -1,0 +1,16 @@
+{
+  "name": "Tally",
+  "short_name": "Tally",
+  "description": "錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。",
+  "lang": "zh-Hant",
+  "start_url": "/#/recent",
+  "display": "standalone",
+  "background_color": "#f3efe6",
+  "theme_color": "#f3efe6",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

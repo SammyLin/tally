@@ -1,0 +1,19 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tally",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-30",
+  "assets": { "directory": "public", "run_worker_first": ["/api/*", "/media/*"] },
+  // D1 `noteapp` and R2 `noteapp-audio` keep their pre-rename names (Cloudflare cannot rename them in place).
+  "d1_databases": [
+    { "binding": "DB", "database_name": "noteapp", "database_id": "9642be67-5d23-4ba4-a8f7-6b3e2a5829b0", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "noteapp-audio" }],
+  // ACCESS_TEAM = <team> of <team>.cloudflareaccess.com, ACCESS_AUD = Access app audience tag. Unset → API answers 503.
+  // VOICE_MATCH_THRESHOLD = min cosine for auto-labelling a speaker from a voiceprint.
+  "vars": { "VOICE_MATCH_THRESHOLD": "0.75", "ACCESS_TEAM": "3mi", "ACCESS_AUD": "0cf4c83df1ba97488cd09b937aeafe8f11fe463659bbaf2f537504e8d13dd486" },
+  "routes": [{ "pattern": "records.3mi.ai", "custom_domain": true }],
+  "workers_dev": false,
+  "preview_urls": false,
+  "observability": { "enabled": true }
+}

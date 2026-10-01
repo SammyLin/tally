@@ -15,7 +15,7 @@ import (
 var (
 	idleSleep      = 10 * time.Second
 	heartbeatEvery = 60 * time.Second // lease is 10 min
-	stopGrace      = 30 * time.Second // on SIGINT the current job gets this long before it is failed
+	stopGrace      = 5 * time.Second // on SIGINT/SIGTERM the current job gets this long, then it is requeued; grace + requeue must fit launchd's 20 s ExitTimeOut
 	errStopped     = errors.New("runner stopped")
 )
 
@@ -100,7 +100,7 @@ func run(ctx context.Context, cfg Config) error {
 }
 
 // runJob runs one job with a background heartbeat. Lease lost → abort silently; other errors → fail.
-// When stop is cancelled the job may finish within stopGrace, else it is cancelled and failed as "runner stopped".
+// When stop is cancelled the job may finish within stopGrace, else it is cancelled and put back in the queue.
 func runJob(stop context.Context, cfg Config, c *client, j *job) {
 	t := &task{job: *j, c: c}
 	slog.Info("job", "kind", t.Kind, "id", t.ID)
@@ -167,7 +167,13 @@ func runJob(stop context.Context, cfg Config, c *client, j *job) {
 		slog.Error("requeue", "id", t.ID, "err", derr)
 	}
 	if stop.Err() != nil { // Ctrl-C also kills ffmpeg/whisper/ACP children, so their errors mean "stopped"
-		err = errStopped
+		slog.Warn("runner stopping, requeueing job", "kind", t.Kind, "id", t.ID)
+		dctx, dcancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer dcancel()
+		if derr := t.post(dctx, "defer", map[string]any{"seconds": 0, "note": "runner 已停止，重新排隊"}, nil); derr != nil {
+			slog.Error("requeue failed; the lease will expire and release it", "id", t.ID, "err", derr)
+		}
+		return
 	}
 	slog.Error("job failed", "kind", t.Kind, "id", t.ID, "err", err)
 	fctx, fcancel := context.WithTimeout(context.Background(), 30*time.Second)

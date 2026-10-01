@@ -169,6 +169,7 @@ cp .env.example .env && open -e .env
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
+  <key>ExitTimeOut</key><integer>30</integer>
   <key>ProcessType</key><string>Background</string>
   <key>StandardOutPath</key><string>/Users/<you>/noteapp/runner/data/logs/runner.log</string>
   <key>StandardErrorPath</key><string>/Users/<you>/noteapp/runner/data/logs/runner.log</string>

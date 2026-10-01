@@ -245,6 +245,14 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
+  // Puts a claimed summary straight back in the queue (runner shutting down).
+  ["POST", /^\/api\/runner\/summar(?:y|ies)\/(\d+)\/defer$/, async (req, env, [sid]) => {
+    const r = await env.DB.prepare(`UPDATE summaries SET status='queued', runner=NULL, lease_until=NULL
+      WHERE id=?1 AND runner=?2 AND ${ACTIVE.summaries}`).bind(id(sid), runnerName(await readJSON(req))).run();
+    if (!r.meta.changes) throw new HttpError(409, "lease lost");
+    return { ok: true };
+  }],
+
   ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/fail$/, async (req, env, [k, jid]) => {
     const kind = kindOf(k);
     const body = await readJSON<{ runner?: unknown; error?: unknown }>(req);

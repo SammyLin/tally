@@ -245,7 +245,32 @@ func TestRunJobStopped(t *testing.T) {
 	stop, cancel := context.WithCancel(t.Context())
 	cancel()
 	runJob(stop, cfg, c, &job{Kind: "summary", ID: 4, TemplateID: "meeting", Language: "en"})
-	if b := f.body("POST /api/runner/summaries/4/fail"); b["error"] != "runner stopped" {
-		t.Fatalf("fail body: %v (calls %v)", b, f.seen())
+	if b := f.body("POST /api/runner/summaries/4/defer"); b["seconds"] != 0.0 {
+		t.Fatalf("want requeue on stop, defer body: %v (calls %v)", b, f.seen())
+	}
+	if slices.Contains(f.seen(), "POST /api/runner/summaries/4/fail") {
+		t.Fatalf("stopped job must not be failed: %v", f.seen())
+	}
+}
+
+func TestRunJobStoppedRecordingRequeued(t *testing.T) {
+	cfg := Config{DataDir: t.TempDir()}
+	stopGrace = 50 * time.Millisecond
+	f, c := newFakeAPI(t, func(call string, w http.ResponseWriter) bool {
+		if call == "GET /api/runner/recordings/7/source" {
+			time.Sleep(time.Second) // still downloading when the grace period ends
+			w.Write([]byte("audio"))
+			return true
+		}
+		return false
+	})
+	stop, cancel := context.WithCancel(t.Context())
+	cancel()
+	runJob(stop, cfg, c, &job{Kind: "recording", ID: 7, Filename: "x.mp3"})
+	if b := f.body("POST /api/runner/recordings/7/defer"); b["seconds"] != 0.0 || b["runner"] != "mac1" {
+		t.Fatalf("defer body: %v (calls %v)", b, f.seen())
+	}
+	if slices.Contains(f.seen(), "POST /api/runner/recordings/7/fail") {
+		t.Fatalf("stopped job must not be failed: %v", f.seen())
 	}
 }

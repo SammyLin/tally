@@ -264,7 +264,7 @@ Runner still runs cleanup + title via local ACP between `transcript` and `done`,
 
 ### runner/ (Go)
 - Config (`runner/.env`): `API_BASE=https://records.3mi.ai`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` (sent as `CF-Access-Client-Id` / `CF-Access-Client-Secret` headers), `RUNNER_NAME` (default hostname), plus the existing STT/diarize/ACP vars. `DATA_DIR` holds models and a work dir (`work/<id>/`, deleted after each job).
-- Commands: `tally run` (default: loop claim → process → sleep 10 s when idle; graceful on SIGINT: finish or fail current job), `tally ingest <dir>` (upload via the multipart API; subfolder path → folder tree via folders API, reuse existing; skip files already uploaded by filename+size via `GET /api/recordings?filename=&size=`), `tally models`.
+- Commands: `tally run` (default: loop claim → process → sleep 10 s when idle; graceful on SIGINT/SIGTERM: the current job gets 5 s, then is handed back with `POST /api/runner/{recordings|summaries}/{id}/defer` `{seconds:0}` so another runner picks it up at once; a crash is covered by the 10 min lease), `tally ingest <dir>` (upload via the multipart API; subfolder path → folder tree via folders API, reuse existing; skip files already uploaded by filename+size via `GET /api/recordings?filename=&size=`), `tally models`.
 - Pipeline logic (ffmpeg, STT, diarize, split, cleanup batching/parsing, prompts, title) is reused; only DB access is replaced by HTTP calls.
 
 ### UI (web/public/index.html)

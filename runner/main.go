@@ -105,8 +105,18 @@ func ingest(ctx context.Context, c *client, root string) error {
 
 	added := 0
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !slices.Contains(mediaExts, strings.ToLower(filepath.Ext(path))) {
+		if err != nil {
 			return err
+		}
+		// hidden entries: AppleDouble "._x.m4a" files on exFAT/SMB drives, .Trashes, .Spotlight-V100, ...
+		if path != root && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() || !slices.Contains(mediaExts, strings.ToLower(filepath.Ext(path))) {
+			return nil
 		}
 		fi, err := d.Info()
 		if err != nil || fi.Size() == 0 {

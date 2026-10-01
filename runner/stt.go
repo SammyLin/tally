@@ -234,10 +234,9 @@ func transcribeGroq(ctx context.Context, cfg Config, wavPath string) ([]Segment,
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("ffmpeg split: %w: %s", err, tail(out))
 	}
-	chunks, _ := filepath.Glob(filepath.Join(dir, "*.flac")) // sorted; names are zero-padded
 	var segs []Segment
 	offset := 0.0
-	for _, c := range chunks {
+	for _, c := range groqChunks(dir) {
 		got, dur, err := groqChunk(ctx, cfg, c)
 		if err != nil {
 			return nil, fmt.Errorf("groq %s: %w", filepath.Base(c), err)
@@ -248,6 +247,13 @@ func transcribeGroq(ctx context.Context, cfg Config, wavPath string) ([]Segment,
 		offset += cmp.Or(dur, groqChunkSec) // the segment muxer cuts on packet boundaries; trust the reported duration
 	}
 	return segs, nil
+}
+
+// groqChunks lists the ffmpeg segment files in order. Only ffmpeg's own NNNN.flac names count: on exFAT/SMB
+// volumes macOS adds AppleDouble "._0000.flac" files next to them, which "*.flac" would pick up (and sort first).
+func groqChunks(dir string) []string {
+	chunks, _ := filepath.Glob(filepath.Join(dir, "[0-9][0-9][0-9][0-9].flac")) // sorted; names are zero-padded
+	return chunks
 }
 
 type groqSegment struct {

@@ -274,3 +274,40 @@ func TestRunJobStoppedRecordingRequeued(t *testing.T) {
 		t.Fatalf("stopped job must not be failed: %v", f.seen())
 	}
 }
+
+func TestIngestSkipsHidden(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"a.m4a", "._a.m4a", ".Trashes/b.m4a", "sub/c.mp3", "sub/._c.mp3"} {
+		p := filepath.Join(root, n)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		if err := os.WriteFile(p, []byte("audio"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f, c := newFakeAPI(t, func(call string, w http.ResponseWriter) bool {
+		switch {
+		case call == "GET /api/folders", strings.HasPrefix(call, "GET /api/recordings?"):
+			w.Write([]byte(`[]`))
+		case call == "POST /api/folders":
+			w.Write([]byte(`{"id":1}`))
+		case call == "POST /api/uploads":
+			w.Write([]byte(`{"recording_id":5,"part_size":1048576}`))
+		case strings.HasPrefix(call, "PUT /api/uploads/"):
+			w.Write([]byte(`{"etag":"e"}`))
+		default:
+			return false
+		}
+		return true
+	})
+	if err := ingest(t.Context(), c, root); err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, b := range f.bodies["POST /api/uploads"] {
+		names = append(names, b.(map[string]any)["filename"].(string))
+	}
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"a.m4a", "c.mp3"}) {
+		t.Fatalf("uploaded %v", names)
+	}
+}

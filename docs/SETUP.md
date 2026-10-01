@@ -146,36 +146,13 @@ cp .env.example .env && open -e .env
 
 ### 用 launchd 常駐（開機自動跑、掛了自動重啟）
 
-建立 `~/Library/LaunchAgents/ai.3mi.tally-runner.plist`（`<you>` 換成那台 Mac 的使用者名稱、路徑換成實際位置）：
+在 `runner/` 目錄（編譯好 `./tally`、放好 `.env` 之後）執行：
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key><string>ai.3mi.tally-runner</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/<you>/noteapp/runner/tally</string>
-    <string>run</string>
-  </array>
-  <!-- .env 和 data/ 都是相對於這個目錄 -->
-  <key>WorkingDirectory</key><string>/Users/<you>/noteapp/runner</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <!-- ffmpeg / whisper-cli / node / claude-agent-acp 都在 /opt/homebrew/bin -->
-    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
-  </dict>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>30</integer>
-  <key>ExitTimeOut</key><integer>30</integer>
-  <key>ProcessType</key><string>Background</string>
-  <key>StandardOutPath</key><string>/Users/<you>/noteapp/runner/data/logs/runner.log</string>
-  <key>StandardErrorPath</key><string>/Users/<you>/noteapp/runner/data/logs/runner.log</string>
-</dict>
-</plist>
+```sh
+sh install-launchd.sh
 ```
+
+它會依這個目錄與目前使用者產生 `~/Library/LaunchAgents/ai.3mi.tally-runner.plist`（不用手改路徑）、移除改名前的 `ai.3mi.noteapp-runner`，並啟動 runner。更新程式後重新編譯，再跑一次即可。
 
 常用指令：
 
@@ -188,7 +165,8 @@ tail -f ~/noteapp/runner/data/logs/runner.log                                   
 
 注意：
 - 用 LaunchAgent（登入使用者身分）而不是 LaunchDaemon，`claude login` 的憑證才讀得到。家裡那台要設成**自動登入**或至少保持登入狀態，並在「系統設定 → 能源」關掉自動睡眠，不然 runner 會停。
-- 公司這台也可以用同一份 plist（改路徑即可）。兩台同時跑沒問題。
+- 每台 Mac 都跑一次 `install-launchd.sh` 即可，兩台同時跑沒問題。
+- 專案和 `DATA_DIR` 最好放在內建磁碟（APFS）。放在 exFAT 外接碟或網路磁碟時，macOS 會到處產生 `._` 開頭的檔案；runner 已會略過它們，但 git 會出現 `non-monotonic index ._pack-….idx` 這類錯誤，可用 `find .git -name "._*" -delete` 清掉。
 
 ## 8. 手機
 

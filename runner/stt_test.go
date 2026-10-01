@@ -116,3 +116,17 @@ func TestGroqQuota(t *testing.T) {
 		t.Fatalf("got %v, want groqQuotaError{116s}", err)
 	}
 }
+
+func TestGroqChunksSkipsAppleDouble(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"0001.flac", "._0000.flac", "0000.flac", "._0001.flac", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := groqChunks(dir)
+	want := []string{filepath.Join(dir, "0000.flac"), filepath.Join(dir, "0001.flac")}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+}

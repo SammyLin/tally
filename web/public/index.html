@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+TC:wght@700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous" defer onload="window.renderSummaries&&renderSummaries()"></script>
 <style>
+[hidden]{display:none!important} /* a class's display (flex/grid) must never un-hide an element */
 /* 錄音室手記 — warm paper, ink, one signal red (the REC tally). Serif for titles, mono for timecodes. */
 :root{
   --paper:#f3efe6;--panel:#fbf9f4;--sunk:#ebe5d8;--sel:#e6dfcf;--line:#d8d0c0;--line2:#e5dfd2;
@@ -134,7 +135,6 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .rrow .badge{margin-left:6px}
 .empty{padding:40px 16px;color:var(--mute);text-align:center;font-size:.9rem}
 .ctx{position:fixed;z-index:45;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:5px;display:grid;min-width:180px;animation:pop .14s var(--ease)}
-.ctx[hidden]{display:none}
 .ctx button,details.menu>div button{border:0;background:none;text-align:left;padding:.55em .8em;border-radius:var(--r-s)}
 .ctx button:hover,details.menu>div button:hover{background:var(--sunk)}
 .ctx .danger,details.menu .danger{color:var(--danger)}
@@ -143,7 +143,6 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .pk{border:0;background:none;text-align:left;padding:.5em .6em;padding-left:calc(.6em + var(--d,0)*16px);display:flex;gap:8px;align-items:center;border-radius:var(--r-s)}
 .pk[aria-current=true]{background:var(--sel);font-weight:600}
 .alert{position:fixed;top:0;left:0;right:0;z-index:50;background:var(--danger);color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
-.alert[hidden]{display:none}
 .alert button{background:#fff;color:#000;border-color:#fff}
 
 /* ---- recording ---- */
@@ -323,7 +322,6 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
 .set-err{margin:0;color:var(--danger);font-size:.85rem;white-space:pre-wrap}
 .set-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--sig-soft);border-radius:var(--r-s);padding:6px 6px 6px 12px;font-size:.88rem}
 .set-bar span{flex:1}
-.set-bar[hidden]{display:none}
 .rec-lang{display:flex;gap:8px;align-items:center;justify-content:center;font-size:.85rem;color:var(--mute);margin:0 0 14px}
 #langTitle{overflow-wrap:anywhere}
 .drop{position:fixed;inset:12px;z-index:20;border-radius:24px;background:color-mix(in srgb,var(--paper) 80%,transparent);backdrop-filter:blur(6px);border:2px dashed var(--sig);display:none;place-items:center;font-family:var(--serif);font-size:1.6rem;font-weight:700;color:var(--ink);pointer-events:none}

@@ -293,6 +293,39 @@ legend{font-size:.72rem;color:var(--faint);letter-spacing:.1em;font-weight:600;m
 fieldset label{display:flex;gap:8px;align-items:center}
 input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
 .row{display:flex;gap:8px;justify-content:flex-end}
+/* settings: scrolling body, fixed footer (error, unsaved bar, buttons) */
+.set-dlg{width:min(560px,calc(100vw - 24px));padding:0;overflow:hidden}
+.set-dlg form{display:flex;flex-direction:column;gap:0;max-height:calc(100dvh - 28px)}
+.set-body{overflow:auto;padding:20px 20px 8px;display:grid;gap:18px}
+.set-body h2{margin:0}
+.set-sec{display:grid;gap:10px}
+.set-sec h3{margin:0;font-size:.72rem;letter-spacing:.14em;color:var(--faint);font-weight:600;padding-bottom:4px;border-bottom:1px solid var(--line2)}
+.fld{display:grid;gap:4px}.fld .lbl{margin:0}
+.fld select{justify-self:start;max-width:100%}
+.set-dlg textarea{width:100%;min-height:3.4em;resize:vertical;font-size:.9rem;border:1px solid var(--line);border-radius:var(--r-s);padding:.4em .6em;background:var(--panel);color:var(--ink)}
+.chk{display:flex;gap:8px;align-items:center}
+.set-dlg input[type=checkbox]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0;flex:none}
+.hint{margin:0;font-size:.78rem;color:var(--mute)}
+.set-dlg .danger{color:var(--danger)}
+.plist{list-style:none;margin:0;padding:0}
+.prow{display:flex;align-items:center;gap:4px 6px;flex-wrap:wrap;padding:4px 0;border-bottom:1px solid var(--line2)}
+.prow .pn{flex:1;min-width:8em;overflow-wrap:anywhere}
+.prow .pm{display:block;font-size:.75rem;color:var(--faint)}
+.prow button{padding:.25em .7em;font-size:.85rem}
+.prow input[type=text]{flex:1;min-width:8em;width:auto;font-size:.95rem;padding:.35em .6em}
+.me{font-weight:400;opacity:.75;letter-spacing:0}
+.chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--panel);cursor:text}
+.chiplist{display:contents}
+.chip{display:inline-flex;align-items:center;background:var(--sunk);border-radius:99px;padding:0 0 0 10px;font-size:.85rem;max-width:100%;overflow-wrap:anywhere}
+.chip button{border:0;background:none;padding:0 8px;min-height:0;line-height:1.7;color:var(--mute)}
+.chips input[type=text]{flex:1;min-width:9em;width:auto;border:0;background:none;padding:.25em .3em;font-size:.9rem;box-shadow:none}
+.set-foot{padding:10px 20px 16px;border-top:1px solid var(--line2);display:grid;gap:8px}
+.set-err{margin:0;color:var(--danger);font-size:.85rem;white-space:pre-wrap}
+.set-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:var(--sig-soft);border-radius:var(--r-s);padding:6px 6px 6px 12px;font-size:.88rem}
+.set-bar span{flex:1}
+.set-bar[hidden]{display:none}
+.rec-lang{display:flex;gap:8px;align-items:center;justify-content:center;font-size:.85rem;color:var(--mute);margin:0 0 14px}
+#langTitle{overflow-wrap:anywhere}
 .drop{position:fixed;inset:12px;z-index:20;border-radius:24px;background:color-mix(in srgb,var(--paper) 80%,transparent);backdrop-filter:blur(6px);border:2px dashed var(--sig);display:none;place-items:center;font-family:var(--serif);font-size:1.6rem;font-weight:700;color:var(--ink);pointer-events:none}
 .drop.on{display:grid;animation:pop .15s var(--ease)}
 .toasts{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);display:grid;gap:8px;z-index:30;width:min(420px,calc(100vw - 32px))}
@@ -448,7 +481,8 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
   <h2 id="recTitle"><span class="dot" aria-hidden="true"></span>錄音中</h2>
   <div class="rec-time" id="recTime" role="timer">00:00</div>
   <canvas class="wave" id="recWave" aria-hidden="true"></canvas>
-  <p class="muted" style="font-size:.85rem;margin:0 0 14px">錄音時請保持此頁面開啟，停止後會自動上傳。</p>
+  <p class="muted" style="font-size:.85rem;margin:0 0 10px">錄音時請保持此頁面開啟，停止後會自動上傳。</p>
+  <label class="rec-lang">語言 <select id="recLang"></select></label>
   <div class="row"><button type="button" id="recCancel">捨棄</button><button type="button" class="primary" id="recStop">停止並上傳</button></div>
 </dialog>
 
@@ -469,6 +503,48 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
     <div class="row">
       <button type="button" id="spkCancel">取消</button>
       <button type="submit" class="primary">儲存</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="langDlg" aria-labelledby="langTitle">
+  <form method="dialog">
+    <h2 id="langTitle"></h2>
+    <p class="muted" id="langNote" style="margin:0;font-size:.88rem"></p>
+    <label class="fld"><span class="lbl">轉錄語言</span><select id="langPick"></select></label>
+    <div class="row"><button type="button" onclick="this.closest('dialog').close()">取消</button><button type="submit" class="primary" value="ok" id="langOk"></button></div>
+  </form>
+</dialog>
+
+<dialog id="setDlg" class="set-dlg" aria-labelledby="setTitle">
+  <form id="setForm">
+    <div class="set-body">
+      <h2 id="setTitle">設定</h2>
+      <section class="set-sec"><h3>AI</h3>
+        <label class="fld"><span class="lbl">關於我</span><textarea name="about" maxlength="500" rows="2" placeholder="職稱、領域、錄音用途"></textarea></label>
+        <label class="fld"><span class="lbl">內容重點</span><textarea name="content_focus" maxlength="500" rows="2"></textarea></label>
+        <label class="fld"><span class="lbl">自訂指示</span><textarea name="instructions" maxlength="500" rows="2"></textarea></label>
+        <p class="hint">只用於產生摘要。</p>
+      </section>
+      <section class="set-sec"><h3>語言與逐字稿</h3>
+        <label class="fld"><span class="lbl">預設轉錄語言</span><select name="stt_lang"></select></label>
+        <label class="chk"><input type="checkbox" name="cleanup"> 自動整理逐字稿（錯字、標點）</label>
+      </section>
+      <section class="set-sec"><h3>講者</h3>
+        <label class="chk"><input type="checkbox" name="auto_label"> 依聲紋自動標記講者</label>
+        <label class="fld"><span class="lbl">我是誰</span><select name="me"></select></label>
+        <div class="fld"><span class="lbl">講者（改名、刪除立即生效）</span><ul class="plist" id="personList"></ul></div>
+      </section>
+      <section class="set-sec"><h3>詞彙</h3>
+        <div class="chips" id="vocabBox"><span class="chiplist" id="vocabChips"></span><input id="vocabIn" type="text" autocomplete="off" placeholder="專有名詞，Enter 或逗號加入" aria-label="新增詞彙"></div>
+        <p class="hint" id="vocabHint"></p>
+      </section>
+      <p class="hint">設定只影響之後的新工作；既有錄音可重新轉錄或重新產生摘要。</p>
+    </div>
+    <div class="set-foot">
+      <p class="set-err" id="setErr" role="alert" hidden></p>
+      <div class="set-bar" id="setBar" hidden><span>有未儲存的變更</span><button type="button" id="setDiscard">放棄</button><button type="button" id="setKeep">繼續編輯</button></div>
+      <div class="row"><button type="button" id="setClose">關閉</button><button type="submit" class="primary">儲存</button></div>
     </div>
   </form>
 </dialog>
@@ -503,7 +579,8 @@ const ICONS = {
   right:'<path d="M9 6l6 6-6 6"/>', down:'<path d="M6 9l6 6 6-6"/>', plus:'<path d="M12 5v14M5 12h14"/>',
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>', clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   list:'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>', search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
-  cal:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', file:'<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/>', inbox:'<path d="M4 13l2-8h12l2 8v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/>'
+  cal:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', file:'<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/>', inbox:'<path d="M4 13l2-8h12l2 8v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/>',
+  gear:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>'
 };
 function icon(n){const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');s.innerHTML=ICONS[n];return s}
 
@@ -661,7 +738,8 @@ function renderNav(){
   const walk=(pid,depth)=>{for(const f of kids(pid)){rows.push(folderRow(f,depth));if(expanded.has(f.id))walk(f.id,depth+1)}};
   walk(null,0);
   if(!S.folders.length)rows.push(h('div',{class:'muted',style:'font-size:.8rem;padding:2px 10px 6px',text:'尚無資料夾'}));
-  rows.push(h('div',{style:'height:10px'}),nv('trash','垃圾桶','trash'));
+  rows.push(h('div',{style:'height:10px'}),nv('trash','垃圾桶','trash'),
+    h('button',{type:'button',class:'nv',onclick:()=>openSettings().catch(fail)},icon('gear'),h('span',{class:'nm',text:'設定'})));
   $('#tree').replaceChildren(...rows);
   $('#tree').querySelector('[aria-current=true]')?.scrollIntoView({block:'nearest'});
 }
@@ -813,16 +891,21 @@ narrow.addEventListener('change',()=>setDrawer(narrow.matches&&!S.id));
 /* ---------- import (R2 multipart via the Worker) ---------- */
 document.querySelectorAll('[data-import]').forEach(b=>b.onclick=()=>$('#fileInput').click());
 document.querySelector('.search').prepend(icon('search'));
-$('#fileInput').onchange=e=>{upload([...e.target.files]);e.target.value=''};
+$('#fileInput').onchange=e=>{importFiles([...e.target.files]);e.target.value=''};
+async function importFiles(files){
+  if(!files.length)return;
+  const language=await askLang(files.length>1?`匯入 ${files.length} 個檔案`:`匯入「${files[0].name}」`,'','開始上傳',SET.stt_lang);
+  if(language)upload(files,{language});
+}
 let dragDepth=0;
 addEventListener('dragenter',e=>{if(e.dataTransfer?.types.includes('Files')){dragDepth++;$('#drop').classList.add('on')}});
 addEventListener('dragleave',e=>{if(e.dataTransfer?.types.includes('Files')&&--dragDepth<=0){dragDepth=0;$('#drop').classList.remove('on')}});
 addEventListener('dragover',e=>{if(e.dataTransfer?.types.includes('Files'))e.preventDefault()});
-addEventListener('drop',e=>{if(!e.dataTransfer?.files.length)return;e.preventDefault();dragDepth=0;$('#drop').classList.remove('on');upload([...e.dataTransfer.files])});
+addEventListener('drop',e=>{if(!e.dataTransfer?.files.length)return;e.preventDefault();dragDepth=0;$('#drop').classList.remove('on');importFiles([...e.dataTransfer.files])});
 addEventListener('beforeunload',e=>{if(rec||uploading){e.preventDefault();e.returnValue=''}});
 
 // keep: offer the file for download when upload fails (used for in-browser recordings, which exist nowhere else)
-async function upload(files,{keep=false}={}){
+async function upload(files,{keep=false,language}={}){
   if(!files.length)return;
   const folder_id=S.view==='folder'?S.folder:null;
   let first=null,ok=0;
@@ -831,7 +914,7 @@ async function upload(files,{keep=false}={}){
     for(const [i,f] of files.entries()){
       const bar=h('progress',{max:'100',value:'0'});
       const t=toast('',0);t.replaceChildren(h('div',{text:`上傳${files.length>1?` ${i+1}/${files.length}`:''}：${f.name}`}),bar);
-      try{const id=await uploadOne(f,folder_id,p=>{bar.value=Math.round(p*100)});first??=id;ok++}
+      try{const id=await uploadOne(f,folder_id,language,p=>{bar.value=Math.round(p*100)});first??=id;ok++}
       catch(e){
         const m=toast(`上傳失敗「${f.name}」：${e.message||e}`,keep?0:8000);
         if(keep){const url=URL.createObjectURL(f);m.append(' ',h('a',{href:url,download:f.name,style:'color:inherit;font-weight:600',text:'下載錄音檔'}),' ',h('button',{type:'button',text:'關閉',onclick:()=>m.remove()}))}
@@ -845,8 +928,8 @@ async function upload(files,{keep=false}={}){
   if(S.view==='trash')setView('all');else loadList();
   if(first)go(first);
 }
-async function uploadOne(file,folder_id,onprog){
-  const {recording_id:id,part_size}=await api('/api/uploads',{method:'POST',body:{filename:file.name,size:file.size,folder_id}});
+async function uploadOne(file,folder_id,language,onprog){
+  const {recording_id:id,part_size}=await api('/api/uploads',{method:'POST',body:{filename:file.name,size:file.size,folder_id,language}});
   const n=Math.max(1,Math.ceil(file.size/part_size)),loaded=new Array(n).fill(0),parts=[],live=new Set();
   let next=0,failed=null;
   const report=()=>onprog(loaded.reduce((a,b)=>a+b,0)/(file.size||1));
@@ -910,6 +993,7 @@ async function startRecord(){
   mr.start(1000);
   wakeLock();
   $('#recTime').textContent='00:00';
+  $('#recLang').replaceChildren(...langOpts(SET.stt_lang));
   $('#recDlg').showModal();
   requestAnimationFrame(recTick);
 }
@@ -944,7 +1028,7 @@ function finishRecord(){
   const ext=type.includes('mp4')?'m4a':type.includes('ogg')?'ogg':'webm';
   const d=new Date(r.t0),p=n=>String(n).padStart(2,'0');
   const name=`錄音 ${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}.${ext}`;
-  upload([new File(r.chunks,name,{type})],{keep:true});
+  upload([new File(r.chunks,name,{type})],{keep:true,language:$('#recLang').value});
 }
 $('#recStop').onclick=()=>stopRecord(false);
 $('#recCancel').onclick=()=>{if(confirm('捨棄這段錄音？'))stopRecord(true)};
@@ -1029,7 +1113,9 @@ function renderDetail(){
     act('還原',async()=>{await api(`/api/recordings/${r.id}/restore`,{method:'POST'});toast('已還原');S.d=null;loadList();loadFolders();loadDetail()}),
     act('永久刪除',async()=>{if(!confirm(`永久刪除「${r.title}」？此動作無法復原。`))return;await api(`/api/recordings/${r.id}?purge=1`,{method:'DELETE'});toast('已永久刪除');go(null);loadList()},'danger')
   ]:[
-    act('重新轉錄',async()=>{if(!confirm('重新轉錄會覆蓋目前的逐字稿與講者名稱，確定？'))return;await api(`/api/recordings/${r.id}/retranscribe`,{method:'POST'});toast('已排入重新轉錄');loadList();loadDetail()}),
+    act('重新轉錄',async()=>{
+      const language=await askLang('重新轉錄','會覆蓋目前的逐字稿與講者名稱。','重新轉錄',r.language??SET.stt_lang);if(!language)return;
+      await api(`/api/recordings/${r.id}/retranscribe`,{method:'POST',body:{language}});toast('已排入重新轉錄');loadList();loadDetail()}),
     act('移到資料夾…',async()=>{
       const cur=r.folder_id??null,v=await pickFolder(`移動「${r.title}」到`,'未分類',new Set(),cur);
       if(v&&v.id!==cur)await moveRec(r.id,v.id);
@@ -1117,6 +1203,8 @@ function renderTranscript(pane){
   if(!segments.length){pane.append(h('p',{class:'muted',text:BUSY(r.status)?'逐字稿產生中…':'沒有逐字稿內容。'}));S.segEls=[];S.starts=[];return}
   const names=Object.fromEntries(speakers.map(s=>[s.id,s.display_name]));
   const autos=new Set(speakers.filter(s=>s.auto===1).map(s=>s.id));
+  const mine=new Set(speakers.filter(s=>SET.me!=null&&s.person_id===SET.me).map(s=>s.id));
+  const meTag=id=>mine.has(id)?h('span',{class:'me',text:'（我）'}):null;
   // talk time per speaker, largest first
   const share=new Map();let total=0;
   for(const s of segments){const d=s.end_ms-s.start_ms;total+=d;share.set(s.speaker_id,(share.get(s.speaker_id)||0)+d)}
@@ -1126,7 +1214,7 @@ function renderTranscript(pane){
     h('button',{type:'button',text:'✓','aria-label':`確認是 ${sp.suggest.name}`,onclick:e=>decideSuggest(sp,sp.suggest.name,e.currentTarget)}),
     h('button',{type:'button',text:'✕','aria-label':'不是','title':'不是',onclick:e=>decideSuggest(sp,sp.display_name,e.currentTarget)}));
   if(share.size>1||sugs.size)pane.append(h('div',{class:'legend','aria-label':'講者發言比例'},[...share].sort((a,b)=>b[1]-a[1]).map(([id,d])=>
-    h('span',{style:`--c:${spkColor(id)}`},h('i'),h('b',{text:id!=null?(names[id]||'未知講者'):'未知講者'}),h('span',{class:'mono',text:Math.round(d/total*100)+'%'}),sugs.has(id)?sugChip(sugs.get(id)):null))));
+    h('span',{style:`--c:${spkColor(id)}`},h('i'),h('b',{text:id!=null?(names[id]||'未知講者'):'未知講者'},meTag(id)),h('span',{class:'mono',text:Math.round(d/total*100)+'%'}),sugs.has(id)?sugChip(sugs.get(id)):null))));
   const cleaned=segments.some(s=>s.text_clean!=null);
   pane.append(h('div',{class:'banner'},
     cleaned?[h('span',{text:S.showRaw?'正在檢視原始逐字稿':'逐字稿已整理'}),'·',
@@ -1141,7 +1229,7 @@ function renderTranscript(pane){
     const txt=h('div',{class:'seg-text',text});
     const el=h('div',{class:'seg','data-i':String(i),style:`--c:${spkColor(s.speaker_id)}`},
       h('button',{type:'button',class:'ts','aria-label':`從 ${fmtDur(s.start_ms/1000)} 播放`,text:fmtDur(s.start_ms/1000),onclick:()=>seekTo(s)}),
-      h('button',{type:'button',class:'spk','aria-label':`講者：${name}${autos.has(s.speaker_id)?'（依聲紋自動辨識）':''}，點擊重新命名`,onclick:e=>openSpeaker(s,name,e.currentTarget)},name,autos.has(s.speaker_id)?h('span',{class:'badge',style:'margin-left:6px;letter-spacing:0',text:'自動',title:'依聲紋自動辨識，點擊可更正'}):null),
+      h('button',{type:'button',class:'spk','aria-label':`講者：${name}${mine.has(s.speaker_id)?'（我）':''}${autos.has(s.speaker_id)?'（依聲紋自動辨識）':''}，點擊重新命名`,onclick:e=>openSpeaker(s,name,e.currentTarget)},name,meTag(s.speaker_id),autos.has(s.speaker_id)?h('span',{class:'badge',style:'margin-left:6px;letter-spacing:0',text:'自動',title:'依聲紋自動辨識，點擊可更正'}):null),
       txt,
       h('div',{class:'seg-tools'},
         h('button',{type:'button','aria-label':'編輯文字',title:'編輯',onclick:()=>editSeg(s,txt)},icon('edit')),
@@ -1346,7 +1434,7 @@ async function renderSummaryTab(pane){
   if(!META){try{META=await api('/api/templates')}catch(e){fail(e);META={templates:[],languages:[]}}}
   if(S.d?.recording.id!==r.id||S.tab!=='summary')return;
   const tpl=h('select',{id:'tplSel'},META.templates.map(t=>h('option',{value:t.id,text:t.name})));
-  const lang=h('select',{id:'langSel'},META.languages.map(l=>h('option',{value:l.id,selected:l.id==='zh-TW',text:l.name})));
+  const lang=h('select',{id:'langSel'},META.languages.map(l=>h('option',{value:l.id,selected:l.id===sumLang(),text:l.name})));
   const gen=h('button',{type:'submit',class:'primary',text:'產生摘要',disabled:r.status!=='done'||!META.templates.length});
   const form=h('form',{class:'sum-form',onsubmit:async e=>{
     e.preventDefault();gen.disabled=true;
@@ -1389,6 +1477,145 @@ function renderSummaries(){
   }):[h('p',{class:'muted',text:'還沒有摘要。'})]));
 }
 
+/* ---------- settings ---------- */
+const LANGS=[['zh','中文'],['en','English'],['ja','日本語'],['auto','自動偵測']];
+const SET_DEF={about:'',content_focus:'',instructions:'',stt_lang:'zh',cleanup:true,auto_label:true,me:null,vocab:[]};
+let SET={...SET_DEF},PERSONS=[],personsErr=null,setVocab=[];
+// an old Worker has no /api/settings: keep the defaults
+async function loadSettings(){try{SET={...SET_DEF,...await api('/api/settings')}}catch(e){console.warn('settings',e)}}
+async function loadPersons(){try{PERSONS=await api('/api/persons');personsErr=null}catch(e){PERSONS=[];personsErr=e.message}}
+const langOpts=v=>LANGS.map(([id,n])=>h('option',{value:id,selected:id===v,text:n}));
+const sumLang=()=>({en:'en',ja:'ja'})[SET.stt_lang]||'zh-TW';
+function askLang(title,note,okLabel,def){
+  return new Promise(res=>{
+    const d=$('#langDlg');
+    $('#langTitle').textContent=title;$('#langNote').textContent=note;$('#langNote').hidden=!note;$('#langOk').textContent=okLabel;
+    $('#langPick').replaceChildren(...langOpts(def));
+    d.returnValue='';d.onclose=()=>res(d.returnValue==='ok'?$('#langPick').value:null);
+    d.showModal();
+  });
+}
+// mirrors the runner's sttPrompt/promptTokens: 1 token per non-ASCII rune + ceil(ASCII chars/4); zh example (no separator) + vocab joined by 、; stop at the first term past 200
+const ZH_PROMPT='好，那我們開始今天的會議。這一季的 roadmap 跟 API 進度，大家有什麼想法？';
+function sttTokens(s){const a=(s.match(/[\x00-\x7f]/g)||[]).length;return [...s].length-a+Math.ceil(a/4)}
+function sttVocabFit(lang,vocab){
+  let p=lang==='zh'?ZH_PROMPT:'',n=0;
+  for(const w of vocab){const q=p+(n?'、':'')+w;if(sttTokens(q)>200)break;p=q;n++}
+  return n;
+}
+
+const setDlg=$('#setDlg'),setF=$('#setForm').elements;
+function setMsg(t){$('#setErr').textContent=t||'';$('#setErr').hidden=!t}
+function formSettings(){
+  return {about:setF.about.value.trim(),content_focus:setF.content_focus.value.trim(),instructions:setF.instructions.value.trim(),
+    stt_lang:setF.stt_lang.value,cleanup:setF.cleanup.checked,auto_label:setF.auto_label.checked,me:setF.me.value?+setF.me.value:null,vocab:[...setVocab]};
+}
+const setKey=o=>JSON.stringify(Object.keys(SET_DEF).map(k=>o[k]));
+const setDirty=()=>setKey(formSettings())!==setKey(SET)||!!$('#vocabIn').value.trim();
+function fillSettings(){
+  for(const k of ['about','content_focus','instructions'])setF[k].value=SET[k]??'';
+  setF.stt_lang.replaceChildren(...langOpts(SET.stt_lang));
+  setF.cleanup.checked=!!SET.cleanup;setF.auto_label.checked=!!SET.auto_label;
+  setVocab=[...(SET.vocab||[])];$('#vocabIn').value='';renderVocab();
+  renderMeSel(SET.me);
+}
+// v = the selection to keep; falls back to the saved one when that person is gone
+function renderMeSel(v){
+  if(v==null||!PERSONS.some(p=>p.id===v))v=SET.me;
+  setF.me.replaceChildren(h('option',{value:'',text:'（未設定）'}),...PERSONS.map(p=>h('option',{value:String(p.id),selected:p.id===v,text:p.name})));
+}
+async function openSettings(){
+  await Promise.all([loadSettings(),loadPersons()]);
+  setMsg('');$('#setBar').hidden=true;
+  fillSettings();renderPersons();
+  setDlg.showModal();setDlg.querySelector('.set-body').scrollTop=0;
+}
+function closeSettings(){if(setDirty())$('#setBar').hidden=false;else setDlg.close()}
+setDlg.addEventListener('cancel',e=>{e.preventDefault();closeSettings()});
+$('#setClose').onclick=closeSettings;
+$('#setDiscard').onclick=()=>setDlg.close();
+$('#setKeep').onclick=()=>{$('#setBar').hidden=true};
+setF.stt_lang.onchange=vocabHint;
+// re-render the open recording: speaker names /（我）/ summary language may have changed
+function reloadDetail(){
+  const id=S.id;if(!id)return;
+  api(`/api/recordings/${id}`).then(d=>{if(S.id===id){S.d=d;renderDetail()}}).catch(()=>{});
+}
+$('#setForm').onsubmit=async e=>{
+  e.preventDefault();
+  addVocab($('#vocabIn').value);$('#vocabIn').value='';
+  const btn=e.submitter;if(btn)btn.disabled=true;setMsg('');
+  try{
+    SET={...SET_DEF,...await api('/api/settings',{method:'PUT',body:formSettings()})};
+    setDlg.close();toast('已儲存設定');reloadDetail();
+  }catch(err){setMsg('無法儲存：'+err.message)}finally{if(btn)btn.disabled=false}
+};
+
+function addVocab(text){
+  for(const w of text.split(/[,，、\n]/).map(s=>s.trim()).filter(Boolean)){
+    if(w.length>50){setMsg(`「${w.slice(0,20)}…」超過 50 字`);continue}
+    if(setVocab.includes(w))continue;
+    if(setVocab.length>=200){setMsg('詞彙最多 200 個');break}
+    setVocab.push(w);
+  }
+  renderVocab();
+}
+function renderVocab(){
+  $('#vocabChips').replaceChildren(...setVocab.map((w,i)=>h('span',{class:'chip'},w,
+    h('button',{type:'button',text:'×','aria-label':`移除 ${w}`,onclick:()=>{setVocab.splice(i,1);renderVocab();$('#vocabIn').focus()}}))));
+  vocabHint();
+}
+function vocabHint(){
+  const m=setVocab.length,n=sttVocabFit(setF.stt_lang.value,setVocab);
+  $('#vocabHint').textContent=!m?'用於語音辨識、逐字稿整理與摘要。沒有詞彙就不使用。'
+    :n===m?`${m} 個詞都會送進語音辨識`:`前 ${n} 個詞會送進語音辨識，其餘 ${m-n} 個只用於整理與摘要`;
+}
+$('#vocabBox').onclick=e=>{if(e.target===e.currentTarget)$('#vocabIn').focus()};
+$('#vocabIn').addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.isComposing){e.preventDefault();addVocab(e.target.value);e.target.value=''}
+  else if(e.key==='Backspace'&&!e.target.value&&setVocab.length){setVocab.pop();renderVocab()}
+});
+$('#vocabIn').addEventListener('input',e=>{
+  const v=e.target.value;if(!/[,，、]/.test(v))return;
+  const parts=v.split(/[,，、]/);e.target.value=parts.pop();addVocab(parts.join(','));
+});
+
+function renderPersons(){
+  $('#personList').replaceChildren(...(personsErr?[h('li',{class:'hint',text:'無法載入講者：'+personsErr})]
+    :PERSONS.length?PERSONS.map(personRow):[h('li',{class:'hint',text:'還沒有講者。在逐字稿中為講者命名後會出現在這裡。'})]));
+}
+async function personsChanged(list){
+  if(Array.isArray(list))PERSONS=list;else await loadPersons();
+  await loadSettings(); // a merge/delete can move or clear `me`
+  renderPersons();renderMeSel(setF.me.value?+setF.me.value:null);reloadDetail();
+}
+function personRow(p){
+  const li=h('li',{class:'prow'});
+  const meta=[`${p.prints||0} 個聲紋`,p.speakers?`${p.speakers} 位講者`:null].filter(Boolean).join(' · ');
+  const btn=(text,fn,cls)=>h('button',{type:'button',class:cls,text,onclick:fn});
+  const view=()=>li.replaceChildren(
+    h('span',{class:'pn'},p.name,p.id===SET.me?h('span',{class:'me',text:'（我）'}):null,h('span',{class:'pm',text:meta})),
+    btn('改名',rename,'ghost'),btn('刪除',del,'ghost danger'));
+  // in-row confirm: message, 取消, action
+  const ask=(msg,label,fn,cls)=>{li.replaceChildren(h('span',{class:'pn',text:msg}),btn('取消',view),
+    btn(label,async e=>{e.currentTarget.disabled=true;setMsg('');await fn()},cls));li.querySelector('button:last-child').focus()};
+  function rename(){
+    const inp=h('input',{type:'text',value:p.name,maxlength:'100','aria-label':`「${p.name}」的新名稱`});
+    const ok=()=>{const name=inp.value.trim();if(!name||name===p.name)view();else patch(name,false)};
+    inp.onkeydown=e=>{if(e.key==='Enter'&&!e.isComposing){e.preventDefault();ok()}else if(e.key==='Escape'){e.preventDefault();view()}};
+    li.replaceChildren(inp,btn('取消',view),btn('確定',ok,'primary'));inp.focus();inp.select();
+  }
+  async function patch(name,merge){
+    try{await personsChanged(await api(`/api/persons/${p.id}`,{method:'PATCH',body:merge?{name,merge:true}:{name}}))}
+    catch(e){if(e.status===409&&!merge)ask(`「${name}」已存在，要合併嗎？`,'合併',()=>patch(name,true),'primary');else{setMsg(e.message);view()}}
+  }
+  function del(){
+    ask(`刪除「${p.name}」？${p.prints||0} 個聲紋會一併刪除`,'刪除',async()=>{
+      try{await api(`/api/persons/${p.id}`,{method:'DELETE'});await personsChanged()}catch(e){setMsg(e.message);view()}},'danger');
+  }
+  view();return li;
+}
+
 /* ---------- keyboard ---------- */
 addEventListener('keydown',e=>{
   const p=S.player;if(!p||S.playerFor!==S.id||document.querySelector('dialog[open]')||e.metaKey||e.ctrlKey||e.altKey)return;
@@ -1399,6 +1626,7 @@ addEventListener('keydown',e=>{
 });
 document.addEventListener('click',e=>{document.querySelectorAll('details.menu[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});
 
+loadSettings().then(()=>{if(S.d)renderDetail()});
 loadFolders();
 loadList();
 loadRunners();

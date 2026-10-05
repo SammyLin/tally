@@ -21,14 +21,25 @@ var (
 
 // job is a claimed unit of work (POST /api/runner/claim).
 type job struct {
-	Kind        string `json:"kind"` // recording | summary
-	ID          int64  `json:"id"`
-	Filename    string `json:"filename"`
-	SourceSize  int64  `json:"source_size"`
-	RecordingID int64  `json:"recording_id"`
-	TemplateID  string `json:"template_id"`
-	Language    string `json:"language"`
-	Transcript  string `json:"transcript"`
+	Kind        string      `json:"kind"` // recording | summary
+	ID          int64       `json:"id"`
+	Filename    string      `json:"filename"`
+	SourceSize  int64       `json:"source_size"`
+	RecordingID int64       `json:"recording_id"`
+	TemplateID  string      `json:"template_id"`
+	Language    string      `json:"language"` // recording: STT language (zh|en|ja|auto); summary: output language
+	Transcript  string      `json:"transcript"`
+	Settings    jobSettings `json:"settings"`
+}
+
+// jobSettings is the runner-relevant subset of the user's settings; absent fields keep the old behaviour.
+type jobSettings struct {
+	Cleanup      *bool    `json:"cleanup"` // recording; nil = on
+	Vocab        []string `json:"vocab"`
+	About        string   `json:"about"` // About..Me: summary only
+	ContentFocus string   `json:"content_focus"`
+	Instructions string   `json:"instructions"`
+	Me           string   `json:"me"` // the user's speaker name
 }
 
 type task struct {
@@ -135,7 +146,7 @@ func runJob(stop context.Context, cfg Config, c *client, j *job) {
 		err = safely(func() error { return processRecording(ctx, cfg, t) })
 	case "summary":
 		err = safely(func() error {
-			md, err := summarize(ctx, cfg, t.TemplateID, t.Language, t.Transcript)
+			md, err := summarize(ctx, cfg, t.TemplateID, t.Language, t.Transcript, t.Settings)
 			if err != nil {
 				return err
 			}

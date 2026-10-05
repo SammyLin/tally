@@ -1,5 +1,6 @@
 // Runner job API: jobs are claimed with a lease; a lease that expires makes the job claimable again.
 import { type Env, type Handler, HttpError, first, parseParts, partNumber, readJSON, runnerName, serveR2, splitFilename } from "./http";
+import { getSettings } from "./settings";
 import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
 const LEASE = `datetime('now','+10 minutes')`;
@@ -89,19 +90,23 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       WHERE id=(SELECT id FROM recordings WHERE deleted_at IS NULL
         AND ((status='queued' AND (not_before IS NULL OR not_before <= datetime('now')))
           OR (${ACTIVE.recordings} AND (lease_until < datetime('now') OR runner=?1))) ORDER BY id LIMIT 1)
-      RETURNING id, filename, size, source_key, play_key`).bind(runner)
-      .first<{ id: number; filename: string; size: number | null; source_key: string | null; play_key: string | null }>();
+      RETURNING id, filename, size, source_key, play_key, language`).bind(runner)
+      .first<{ id: number; filename: string; size: number | null; source_key: string | null; play_key: string | null; language: string | null }>();
     if (rec) {
       // retranscribe after the source was deleted: the runner gets play.m4a as its source
       const size = rec.source_key ? rec.size : rec.play_key ? ((await env.AUDIO.head(rec.play_key))?.size ?? null) : null;
-      return { job: { kind: "recording", id: rec.id, filename: rec.filename, source_size: size } };
+      const { stt_lang, cleanup, vocab } = await getSettings(env);
+      return { job: { kind: "recording", id: rec.id, filename: rec.filename, source_size: size, language: rec.language ?? stt_lang, settings: { cleanup, vocab } } };
     }
     const sum = await env.DB.prepare(`UPDATE summaries SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
       WHERE id=(SELECT id FROM summaries WHERE status='queued' OR (${ACTIVE.summaries} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
       RETURNING id, recording_id, template_id, language`).bind(runner)
       .first<{ id: number; recording_id: number; template_id: string; language: string }>();
     if (!sum) return { job: null };
-    return { job: { kind: "summary", ...sum, transcript: await transcriptText(env, sum.recording_id) } };
+    const { about, content_focus, instructions, me, vocab } = await getSettings(env);
+    const meName = me === null ? null : ((await env.DB.prepare(`SELECT name FROM people WHERE id=?`).bind(me).first<{ name: string }>())?.name ?? null);
+    return { job: { kind: "summary", ...sum, transcript: await transcriptText(env, sum.recording_id),
+      settings: { about, content_focus, instructions, me: meName, vocab } } };
   }],
 
   ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/heartbeat$/, async (req, env, [k, jid]) => {

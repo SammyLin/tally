@@ -26,7 +26,9 @@ export type Suggestion = { person_id: number; score: number };
 // conflicts go to the higher score, and a person is used at most once per recording (`taken` = persons
 // already confirmed in that recording). suggest: every other speaker whose best person scores ≥ suggestAt
 // (held back by threshold, margin or a used person), score rounded to 2 decimals.
-export function matchSpeakers(cands: Candidate[], prints: Print[], threshold: number, taken = new Map<number, Set<number>>(), suggestAt = Infinity) {
+// autoLabel false: no auto labels; would-be auto matches become suggestions instead.
+export function matchSpeakers(cands: Candidate[], prints: Print[], threshold: number, taken = new Map<number, Set<number>>(), suggestAt = Infinity,
+  autoLabel = true) {
   const scored = cands.flatMap((c) => {
     const best = new Map<number, number>();
     for (const p of prints) best.set(p.person_id, Math.max(best.get(p.person_id) ?? -1, cosine(c.embedding, p.embedding)));
@@ -42,8 +44,9 @@ export function matchSpeakers(cands: Candidate[], prints: Print[], threshold: nu
   }
   const suggest = new Map<number, Suggestion>();
   for (const { c, person, score } of scored)
-    if (!auto.has(c.id) && score >= suggestAt) suggest.set(c.id, { person_id: person, score: Math.round(score * 100) / 100 });
-  return { auto, suggest };
+    if (autoLabel ? !auto.has(c.id) && score >= suggestAt : auto.has(c.id) || score >= suggestAt)
+      suggest.set(c.id, { person_id: person, score: Math.round(score * 100) / 100 });
+  return { auto: autoLabel ? auto : new Map<number, number>(), suggest };
 }
 
 // people ids must stay stable (voiceprints hang off them), so no REPLACE; last_used_at = recency for the UI
@@ -67,18 +70,20 @@ type Row = { id: number; recording_id: number; label: string; display_name: stri
   embedding: string | null; suggest_person_id: number | null; suggest_score: number | null };
 
 // Re-labels unconfirmed speakers (of one recording, or all) from the current VOICE_MODEL voiceprints; an auto
-// label that no longer matches goes back to its default "Speaker N". Also (re)sets every speaker's suggestion.
+// label that no longer matches (or every one, with settings.auto_label off) goes back to its default "Speaker N".
+// Also (re)sets every speaker's suggestion.
 // Returns the number of speakers changed.
 // ponytail: loads every print (and every speaker when rid is omitted) into memory; fine for a few thousand.
 export async function rematch(env: Env, rid?: number) {
   const db = env.DB;
   const cols = `id, recording_id, label, display_name, person_id, auto, suggest_person_id, suggest_score,
     CASE WHEN emb_model=?1 THEN embedding END AS embedding`;
-  const [sp, vp] = await db.batch([
+  const [sp, vp, al] = await db.batch([
     rid === undefined
       ? db.prepare(`SELECT ${cols} FROM speakers ORDER BY id`).bind(VOICE_MODEL)
       : db.prepare(`SELECT ${cols} FROM speakers WHERE recording_id=?2 ORDER BY id`).bind(VOICE_MODEL, rid),
     db.prepare(`SELECT v.person_id, v.embedding, p.name FROM voiceprints v JOIN people p ON p.id=v.person_id WHERE v.emb_model=?`).bind(VOICE_MODEL),
+    db.prepare(`SELECT value FROM settings WHERE key='auto_label'`), // inline, not getSettings: keeps this file node-testable
   ]);
   const rows = sp.results as Row[];
   const prints = (vp.results as { person_id: number; embedding: string; name: string }[]);
@@ -89,7 +94,8 @@ export async function rematch(env: Env, rid?: number) {
   const { auto, suggest } = matchSpeakers(
     rows.filter((s) => open(s) && s.embedding).map((s) => ({ id: s.id, recording_id: s.recording_id, embedding: JSON.parse(s.embedding!) })),
     prints.map((p) => ({ person_id: p.person_id, embedding: JSON.parse(p.embedding) })),
-    Number(env.VOICE_MATCH_THRESHOLD) || 0.65, taken, Number(env.VOICE_SUGGEST_THRESHOLD) || 0.5);
+    Number(env.VOICE_MATCH_THRESHOLD) || 0.65, taken, Number(env.VOICE_SUGGEST_THRESHOLD) || 0.5,
+    (al.results[0] as { value: string } | undefined)?.value !== "false");
   const nth = new Map<number, number>(); // runner names diarized speakers "Speaker k" in id order
   const stmts: D1PreparedStatement[] = [];
   for (const s of rows) {

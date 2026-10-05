@@ -27,7 +27,8 @@ func TestParseWhisperJSON(t *testing.T) {
 		{"text":"[_TT_450]","offsets":{"from":9000,"to":9000},"t_dtw":-1}]},
 		{"offsets":{"from":9000,"to":9900},"text":"x","tokens":[
 		{"text":"了","offsets":{"from":9000,"to":9100},"t_dtw":895},
-		{"text":"。","offsets":{"from":9100,"to":9200},"t_dtw":910}]}]}`)
+		{"text":"。","offsets":{"from":9100,"to":9200},"t_dtw":910},
+		{"text":"` + yi[:1] + `[_EOT_]","offsets":{"from":9900,"to":9900},"t_dtw":-1}]}]}`)
 	got, err := parseWhisperJSON(data)
 	if err != nil {
 		t.Fatal(err)
@@ -76,7 +77,7 @@ func TestTranscribeGroq(t *testing.T) {
 	defer srv.Close()
 	groqURL = srv.URL
 	cfg := Config{GroqAPIKey: "k", GroqModel: "whisper-large-v3", WhisperLang: "zh", DataDir: t.TempDir()}
-	got, err := transcribeGroq(t.Context(), cfg, wav)
+	got, err := transcribeGroq(t.Context(), cfg, wav, zhPrompt)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,11 +98,11 @@ func TestTranscribeGroq(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"duration":1,"segments":[{"start":1,"end":2,"text":"好。"}]}`)
 	})
-	if _, err := transcribeGroq(t.Context(), cfg, wav); err == nil {
+	if _, err := transcribeGroq(t.Context(), cfg, wav, zhPrompt); err == nil {
 		t.Fatal("want quota error")
 	}
 	calls, quota = 0, false
-	if got, err = transcribeGroq(t.Context(), cfg, wav); err != nil || calls != 1 || len(got) != 2 {
+	if got, err = transcribeGroq(t.Context(), cfg, wav, zhPrompt); err != nil || calls != 1 || len(got) != 2 {
 		t.Fatalf("resume: got %v err %v calls %d, want 2 segments from 1 call", got, err, calls)
 	}
 	if left, _ := filepath.Glob(filepath.Join(cfg.DataDir, "groq-cache", "*")); len(left) != 0 {
@@ -120,13 +121,18 @@ func flacDuration(t *testing.T, b []byte) string {
 
 func TestDropPromptEcho(t *testing.T) {
 	segs := []Segment{{0, 1, "大家好。"}, {1, 2, "那我們開始今天的會議。"}, {2, 3, "這一季的 Roadmap 跟 API 進度，"}, {3, 4, "好。"}, {4, 5, "我們開始吧。"}}
-	got := dropPromptEcho(segs, zhPrompt)
+	got := dropPromptEcho(segs, zhPrompt, nil)
 	var texts []string
 	for _, s := range got {
 		texts = append(texts, s.Text)
 	}
 	if want := []string{"大家好。", "好。", "我們開始吧。"}; !slices.Equal(texts, want) {
 		t.Fatalf("got %q, want %q", texts, want)
+	}
+	vocab := []string{"Delta", "DEMP"}
+	got = dropPromptEcho([]Segment{{0, 1, "Delta。"}, {1, 2, "Delta、DEMP"}}, sttPrompt("zh", vocab), vocab)
+	if len(got) != 1 || got[0].Text != "Delta。" {
+		t.Fatalf("vocab echo: got %v, want only the single spoken term", got)
 	}
 	if g := (groqSegment{NoSpeechProb: 0.9, AvgLogprob: -1.5}); !g.hallucinated() {
 		t.Fatal("silence not dropped")
@@ -147,9 +153,38 @@ func TestGroqQuota(t *testing.T) {
 	defer func() { groqURL = old }()
 	f := filepath.Join(t.TempDir(), "a.flac")
 	os.WriteFile(f, []byte("x"), 0o600)
-	if _, _, err := groqChunk(t.Context(), Config{GroqAPIKey: "k", GroqModel: "m", WhisperLang: "zh"}, f); err == nil {
+	if _, _, err := groqChunk(t.Context(), Config{GroqAPIKey: "k", GroqModel: "m", WhisperLang: "zh"}, f, ""); err == nil {
 		t.Fatal("want groqQuotaError")
 	} else if q, ok := errors.AsType[groqQuotaError](err); !ok || q.wait != 116*time.Second {
 		t.Fatalf("got %v, want groqQuotaError{116s}", err)
+	}
+}
+
+func TestSTTPrompt(t *testing.T) {
+	long := strings.Repeat("詞", 90) // 90 tokens
+	for _, tc := range []struct {
+		name, lang string
+		vocab      []string
+		want       string
+	}{
+		{"zh no vocab", "zh", nil, zhPrompt},
+		{"en no vocab", "en", nil, ""},
+		{"auto vocab", "auto", []string{"Delta", "DEMP"}, "Delta、DEMP"},
+		{"zh vocab", "zh", []string{"Delta", "德他"}, zhPrompt + "Delta、德他"},
+		{"fits under cap", "ja", []string{long, long, "x"}, long + "、" + long + "、x"}, // 90+1+90+1+1 = 183
+		{"stops at first overflow, list order", "ja", []string{long, long, long, "x"}, long + "、" + long},
+		{"zh over cap", "zh", []string{long, long}, zhPrompt + long},
+	} {
+		if got := sttPrompt(tc.lang, tc.vocab); got != tc.want {
+			t.Errorf("%s: got %q want %q", tc.name, got, tc.want)
+		}
+	}
+	for s, want := range map[string]int{"": 0, "abcd": 1, "abcde": 2, "會議": 2, "Delta、DEMP": 1 + 3} {
+		if got := promptTokens(s); got != want {
+			t.Errorf("promptTokens(%q) = %d want %d", s, got, want)
+		}
+	}
+	if n := promptTokens(sttPrompt("zh", slices.Repeat([]string{"Delta"}, 200))); n > sttPromptMaxTokens {
+		t.Errorf("prompt is %d tokens", n)
 	}
 }

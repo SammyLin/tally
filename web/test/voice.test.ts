@@ -48,6 +48,17 @@ assert.deepEqual(sg([sp(1, nearA(0.8)), sp(2, nearA(0.95))], [A, B], 0.65, none,
 assert.deepEqual(sg([sp(1, nearA(0.9))], [A, B], 0.65, new Map([[10, new Set([1])]]), 0.5), { 1: { person_id: 1, score: 0.9 } });
 assert.deepEqual(sg([sp(1, nearA(0.55))], [A, B], 0.65), {}); // no suggestAt → no suggestions
 
+// autoLabel false: nothing auto-labelled; would-be auto matches are suggested instead, the rest as before
+const off = (c: Parameters<typeof matchSpeakers>[0], t = none) => matchSpeakers(c, [A, B], 0.65, t, 0.5, false);
+assert.equal(off([sp(1, nearA(0.9)), sp(2, unit(0, 0.3, 1))]).auto.size, 0);
+assert.deepEqual(Object.fromEntries(off([sp(1, nearA(0.9)), sp(2, unit(0, 0.3, 1))]).suggest),
+  { 1: { person_id: 1, score: 0.9 }, 2: { person_id: 2, score: 0.96 } });
+assert.deepEqual(Object.fromEntries(off([sp(1, nearA(0.55)), sp(2, nearA(0.45), 11)]).suggest), { 1: { person_id: 1, score: 0.55 } });
+// greedy loser and person taken in the recording still get suggestions
+assert.deepEqual(Object.fromEntries(off([sp(1, nearA(0.8)), sp(2, nearA(0.95))]).suggest),
+  { 1: { person_id: 1, score: 0.8 }, 2: { person_id: 1, score: 0.95 } });
+assert.deepEqual(Object.fromEntries(off([sp(1, nearA(0.9))], new Map([[10, new Set([1])]])).suggest), { 1: { person_id: 1, score: 0.9 } });
+
 assert.ok(isEmbedding(Array(1024).fill(0.1)) && !isEmbedding(Array(1025).fill(0.1)) && !isEmbedding([1, NaN]) && !isEmbedding([]));
 assert.ok(isEmbModel(undefined) && isEmbModel(null) && isEmbModel("eres2net-large-zh-cn") && !isEmbModel("x".repeat(65)) && !isEmbModel("") && !isEmbModel(3));
 console.log("voice ok");

@@ -6,7 +6,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "check": "tsc",
-    "test": "node test/auth.test.ts && node test/voice.test.ts"
+    "test": "node test/auth.test.ts && node test/voice.test.ts && node test/settings.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260930.1",

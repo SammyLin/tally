@@ -63,7 +63,7 @@ const cleanupPrompt = `你是語音辨識逐字稿的校對員。下面每一行
 - 這是校對，不是改寫：不要摘要、潤飾、補完句子、增加內容或加註解。
 - 絕對不要合併或拆分行，也不要把一行的內容移到另一行。
 
-「上下文」區只供參考，不要輸出。
+{vocab}「上下文」區只供參考，不要輸出。
 
 輸出規則：只輸出「待校對」區的每一行，每行格式為「編號<TAB>校對後文字」，編號必須與輸入完全相同，行數與輸入相同。不要輸出其他任何文字，不要用 ` + "```" + ` 包起來。
 
@@ -132,7 +132,7 @@ func processRecording(ctx context.Context, cfg Config, t *task) error {
 		return err
 	}
 	t2 := time.Now()
-	segs, err := transcribe(ctx, cfg, wav)
+	segs, err := transcribe(ctx, cfg, wav, t.Language, t.Settings.Vocab)
 	if err != nil {
 		return fmt.Errorf("transcribe: %w", err)
 	}
@@ -207,18 +207,20 @@ func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []
 		return fmt.Errorf("transcript: got %d segment ids for %d segments", len(res.SegmentIDs), len(segs))
 	}
 
-	if err := t.setStatus(ctx, "cleaning"); err != nil {
-		return err
-	}
 	rows := make([]segRow, len(segs))
 	for i, s := range segs {
 		rows[i] = segRow{res.SegmentIDs[i], s.Text}
 	}
-	if err := cleanup(ctx, cfg, t, rows); err != nil {
-		if ctx.Err() != nil || errors.Is(err, errLeaseLost) {
+	if c := t.Settings.Cleanup; c == nil || *c {
+		if err := t.setStatus(ctx, "cleaning"); err != nil {
 			return err
 		}
-		slog.Error("cleanup failed", "recording", t.ID, "err", err)
+		if err := cleanup(ctx, cfg, t, rows); err != nil {
+			if ctx.Err() != nil || errors.Is(err, errLeaseLost) {
+				return err
+			}
+			slog.Error("cleanup failed", "recording", t.ID, "err", err)
+		}
 	}
 	var text strings.Builder
 	for _, r := range rows {
@@ -334,11 +336,8 @@ func cleanup(ctx context.Context, cfg Config, t *task, rows []segRow) error {
 	for i := 0; i < len(rows); i += cleanupBatch {
 		batch := rows[i:min(i+cleanupBatch, len(rows))]
 		slog.Info("cleanup", "recording", t.ID, "batch", i/cleanupBatch+1, "of", (len(rows)+cleanupBatch-1)/cleanupBatch)
-		prompt := strings.NewReplacer(
-			"{before}", format(rows[max(0, i-3):i]),
-			"{lines}", format(batch),
-			"{after}", format(rows[min(i+cleanupBatch, len(rows)):min(i+cleanupBatch+3, len(rows))]),
-		).Replace(cleanupPrompt)
+		prompt := buildCleanupPrompt(t.Settings.Vocab, format(rows[max(0, i-3):i]), format(batch),
+			format(rows[min(i+cleanupBatch, len(rows)):min(i+cleanupBatch+3, len(rows))]))
 		reply, err := acpAsk(ctx, cfg, prompt)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -368,6 +367,15 @@ func cleanup(ctx context.Context, cfg Config, t *task, rows []segRow) error {
 	return nil
 }
 
+// buildCleanupPrompt fills cleanupPrompt; the vocabulary line is there only when vocab is non-empty.
+func buildCleanupPrompt(vocab []string, before, lines, after string) string {
+	v := ""
+	if len(vocab) > 0 {
+		v = "專有名詞表（只在讀音或字形明顯相近時才改成這些詞，不要硬套）：" + strings.Join(vocab, "、") + "\n\n"
+	}
+	return strings.NewReplacer("{vocab}", v, "{before}", before, "{lines}", lines, "{after}", after).Replace(cleanupPrompt)
+}
+
 // makeTitle asks ACP for a short zh-TW title; "" when the transcript is too short to title.
 func makeTitle(ctx context.Context, cfg Config, text string) (string, error) {
 	r := []rune(strings.TrimSpace(text))
@@ -384,7 +392,20 @@ func makeTitle(ctx context.Context, cfg Config, text string) (string, error) {
 }
 
 // summarize fills the template with the Worker-built transcript ("[mm:ss] Name: text" lines) and asks ACP.
-func summarize(ctx context.Context, cfg Config, templateID, lang, transcript string) (string, error) {
+func summarize(ctx context.Context, cfg Config, templateID, lang, transcript string, s jobSettings) (string, error) {
+	prompt, err := summaryPrompt(templateID, lang, transcript, s)
+	if err != nil {
+		return "", err
+	}
+	reply, err := acpAsk(ctx, cfg, prompt)
+	if err != nil {
+		return "", err
+	}
+	return stripFence(reply), nil
+}
+
+// summaryPrompt fills the template and puts the user's preferences (non-empty parts only) before 逐字稿：.
+func summaryPrompt(templateID, lang, transcript string, s jobSettings) (string, error) {
 	i := slices.IndexFunc(templates, func(t Template) bool { return t.ID == templateID })
 	if i < 0 {
 		return "", fmt.Errorf("unknown template %q", templateID)
@@ -393,12 +414,23 @@ func summarize(ctx context.Context, cfg Config, templateID, lang, transcript str
 	if j := slices.IndexFunc(languages, func(l Language) bool { return l.ID == lang }); j >= 0 {
 		langName = languages[j].Name
 	}
-	prompt := strings.NewReplacer("{language}", langName, "{transcript}", strings.TrimSpace(transcript)).Replace(templates[i].Prompt)
-	reply, err := acpAsk(ctx, cfg, prompt)
-	if err != nil {
-		return "", err
+	var prefs []string
+	add := func(format, v string) {
+		if v = strings.TrimSpace(v); v != "" {
+			prefs = append(prefs, fmt.Sprintf(format, v))
+		}
 	}
-	return stripFence(reply), nil
+	add("- 關於使用者：%s", s.About)
+	add("- 內容重點：%s", s.ContentFocus)
+	add("- 格式與語氣：%s", s.Instructions)
+	add("- 錄音中的「%s」就是使用者本人；待辦事項中屬於使用者的請標註「（我）」。", s.Me)
+	add("- 專有名詞：%s", strings.Join(s.Vocab, "、"))
+	tmpl := templates[i].Prompt
+	if len(prefs) > 0 {
+		block := "使用者偏好（只調整語氣、重點與詳略，不要改變上面規定的段落結構）：\n" + strings.Join(prefs, "\n") + "\n\n"
+		tmpl = strings.Replace(tmpl, "逐字稿：\n{transcript}", block+"逐字稿：\n{transcript}", 1)
+	}
+	return strings.NewReplacer("{language}", langName, "{transcript}", strings.TrimSpace(transcript)).Replace(tmpl), nil
 }
 
 // tool resolves a Homebrew binary; launchd's PATH may lack /opt/homebrew/bin.

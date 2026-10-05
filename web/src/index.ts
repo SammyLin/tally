@@ -3,6 +3,7 @@ import {
   type Env, type Handler, HttpError, errorResponse, first, languages, parseParts, partNumber, readJSON, serveR2, splitFilename, templates,
 } from "./http";
 import { listRunners, runnerRoutes } from "./runner";
+import { STT_LANGS, getSettings, parseSettings, putSettings } from "./settings";
 import { enrol, isDefaultName, rematch, upsertPerson } from "./voice";
 
 const PART_SIZE = 50 * 1024 * 1024;
@@ -11,6 +12,21 @@ const PROCESSING = `('converting','transcribing','cleaning')`;
 const truthy = (v: string | null) => v !== null && v !== "" && v !== "0";
 const id = (s: string) => Number(s);
 const getRecording = (env: Env, rid: number) => first(env.DB.prepare(`SELECT * FROM recordings WHERE id=?`).bind(rid));
+const getPerson = (env: Env, pid: number) => first<{ id: number; name: string }>(env.DB.prepare(`SELECT id, name FROM people WHERE id=?`).bind(pid), "person not found");
+
+function recLanguage(v: unknown) {
+  if (v == null) return null;
+  if (!STT_LANGS.includes(v as string)) throw new HttpError(400, `language must be one of ${STT_LANGS.join("|")}`);
+  return v as string;
+}
+
+async function listPersons(env: Env) {
+  const { results } = await env.DB.prepare(`SELECT p.id, p.name,
+      (SELECT count(*) FROM voiceprints v WHERE v.person_id=p.id) AS prints,
+      (SELECT count(*) FROM speakers s WHERE s.person_id=p.id) AS speakers, p.last_used_at
+    FROM people p ORDER BY p.last_used_at DESC, p.id DESC`).all();
+  return results;
+}
 
 async function detail(env: Env, rid: number) {
   const recording = await getRecording(env, rid);
@@ -113,9 +129,14 @@ const routes: [string, RegExp, Handler][] = [
     return getRecording(env, id(rid));
   }],
 
-  ["POST", /^\/api\/recordings\/(\d+)\/retranscribe$/, async (_req, env, [rid]) => {
+  ["POST", /^\/api\/recordings\/(\d+)\/retranscribe$/, async (req, env, [rid]) => {
+    // body is optional: {language?}; language null = back to the settings default
+    const json = req.headers.get("Content-Type")?.toLowerCase().startsWith("application/json") && (await req.clone().text()).trim();
+    const body = json ? await readJSON<{ language?: unknown }>(req) : {};
+    const lang = "language" in body ? [recLanguage(body.language)] : [];
     await getRecording(env, id(rid));
-    const r = await env.DB.prepare(`UPDATE recordings SET status='queued', error=NULL WHERE id=? AND status IN ('done','error')`).bind(id(rid)).run();
+    const r = await env.DB.prepare(`UPDATE recordings SET status='queued', error=NULL${lang.length ? ", language=?2" : ""}
+      WHERE id=?1 AND status IN ('done','error')`).bind(id(rid), ...lang).run();
     if (!r.meta.changes) throw new HttpError(409, "recording is being processed");
     return getRecording(env, id(rid));
   }],
@@ -159,6 +180,69 @@ const routes: [string, RegExp, Handler][] = [
   ["GET", /^\/api\/people$/, async (_req, env) => {
     const { results } = await env.DB.prepare(`SELECT name FROM people ORDER BY last_used_at DESC, id DESC LIMIT 20`).all<{ name: string }>();
     return results.map((r) => r.name);
+  }],
+
+  // ---- persons (speaker management); every change re-matches all recordings
+  ["GET", /^\/api\/persons$/, (_req, env) => listPersons(env)],
+
+  ["PATCH", /^\/api\/persons\/(\d+)$/, async (req, env, [ps]) => {
+    const pid = id(ps);
+    const body = await readJSON<{ name?: unknown; merge?: unknown }>(req);
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name || [...name].length > 100) throw new HttpError(400, "name must be 1-100 characters");
+    if (isDefaultName(name)) throw new HttpError(400, "name cannot be a default speaker name");
+    const person = await getPerson(env, pid);
+    if (name === person.name) return listPersons(env);
+    const other = await env.DB.prepare(`SELECT id FROM people WHERE name=?`).bind(name).first<{ id: number }>();
+    const db = env.DB;
+    if (!other) {
+      await db.batch([
+        db.prepare(`UPDATE people SET name=?2 WHERE id=?1`).bind(pid, name),
+        db.prepare(`UPDATE speakers SET display_name=?2 WHERE person_id=?1`).bind(pid, name),
+      ]);
+    } else if (body.merge !== true) {
+      return Response.json({ detail: `${name} already exists`, existing_id: other.id }, { status: 409 });
+    } else {
+      await db.batch([
+        db.prepare(`UPDATE voiceprints SET person_id=?2 WHERE person_id=?1`).bind(pid, other.id),
+        db.prepare(`UPDATE speakers SET person_id=?2, display_name=?3 WHERE person_id=?1`).bind(pid, other.id, name),
+        db.prepare(`UPDATE speakers SET suggest_person_id=?2 WHERE suggest_person_id=?1`).bind(pid, other.id),
+        db.prepare(`UPDATE settings SET value=?2 WHERE key='me' AND value=?1`).bind(JSON.stringify(pid), JSON.stringify(other.id)),
+        db.prepare(`DELETE FROM people WHERE id=?`).bind(pid),
+      ]);
+    }
+    await rematch(env);
+    return listPersons(env);
+  }],
+
+  ["DELETE", /^\/api\/persons\/(\d+)$/, async (_req, env, [ps]) => {
+    const pid = id(ps);
+    await getPerson(env, pid);
+    const db = env.DB;
+    // auto labels revert to "Speaker k" (k = position among the recording's diarized speakers, as in rematch); confirmed names stay
+    await db.batch([
+      db.prepare(`UPDATE speakers SET display_name='Speaker ' || (SELECT count(*) FROM speakers s
+          WHERE s.recording_id=speakers.recording_id AND s.label<>'custom' AND s.id<=speakers.id), person_id=NULL, auto=0
+        WHERE person_id=?1 AND auto=1`).bind(pid),
+      db.prepare(`UPDATE speakers SET person_id=NULL WHERE person_id=?1`).bind(pid),
+      db.prepare(`UPDATE speakers SET suggest_person_id=NULL, suggest_score=NULL WHERE suggest_person_id=?1`).bind(pid),
+      db.prepare(`DELETE FROM settings WHERE key='me' AND value=?`).bind(JSON.stringify(pid)),
+      db.prepare(`DELETE FROM voiceprints WHERE person_id=?`).bind(pid),
+      db.prepare(`DELETE FROM people WHERE id=?`).bind(pid),
+    ]);
+    await rematch(env);
+    return { ok: true };
+  }],
+
+  // ---- settings
+  ["GET", /^\/api\/settings$/, (_req, env) => getSettings(env)],
+
+  ["PUT", /^\/api\/settings$/, async (req, env) => {
+    const patch = parseSettings(await readJSON(req));
+    if (typeof patch === "string") throw new HttpError(400, patch);
+    if (patch.me != null && !(await env.DB.prepare(`SELECT 1 FROM people WHERE id=?`).bind(patch.me).first()))
+      throw new HttpError(400, "me: person not found");
+    return putSettings(env, patch);
   }],
 
   ["GET", /^\/api\/templates$/, async () => ({ templates, languages })],
@@ -224,13 +308,14 @@ const routes: [string, RegExp, Handler][] = [
 
   // ---- uploads (R2 multipart through the Worker)
   ["POST", /^\/api\/uploads$/, async (req, env) => {
-    const body = await readJSON<{ filename?: unknown; size?: unknown; folder_id?: unknown }>(req);
+    const body = await readJSON<{ filename?: unknown; size?: unknown; folder_id?: unknown; language?: unknown }>(req);
     if (typeof body.filename !== "string" || !body.filename) throw new HttpError(400, "filename required");
     if (!Number.isInteger(body.size) || (body.size as number) < 0) throw new HttpError(400, "size required");
+    const lang = recLanguage(body.language);
     const folder = await folderExists(env, body.folder_id);
     const { name, ext, stem } = splitFilename(body.filename);
-    const { id: rid } = await first<{ id: number }>(env.DB.prepare(`INSERT INTO recordings(title, filename, status, size, folder_id)
-      VALUES(?, ?, 'uploading', ?, ?) RETURNING id`).bind(stem, name, body.size, folder));
+    const { id: rid } = await first<{ id: number }>(env.DB.prepare(`INSERT INTO recordings(title, filename, status, size, folder_id, language)
+      VALUES(?, ?, 'uploading', ?, ?, ?) RETURNING id`).bind(stem, name, body.size, folder, lang));
     const key = `rec/${rid}/source${ext}`;
     try {
       const up = await env.AUDIO.createMultipartUpload(key);

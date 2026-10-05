@@ -39,7 +39,8 @@ elif pid=$(pgrep -f '^\./tally run$' | head -n 1) && [ -n "$pid" ]; then
   kill -INT "$pid"
   i=0; while kill -0 "$pid" 2>/dev/null && [ $i -lt 30 ]; do sleep 1; i=$((i + 1)); done
   mkdir -p "$dst/data/logs"
-  (cd "$dst" && nohup ./tally run >> data/logs/runner.log 2>&1 &)
+  # only nohup goes to the background (with "cd && nohup … &" a shell would linger holding our stdout)
+  (cd "$dst" || exit 1; nohup ./tally run >> data/logs/runner.log 2>&1 < /dev/null &)
   echo "restarted ./tally run (nohup) — log: $dst/data/logs/runner.log"
 else
   echo "no runner running; start it with $src/install-launchd.sh (or: cd $dst && ./tally run)"

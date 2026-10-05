@@ -2,13 +2,15 @@ package main
 
 import (
 	"bytes"
-	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -219,41 +221,73 @@ const groqMaxWait = time.Minute
 
 const groqChunkSec = 600 // 10 min of 16k mono FLAC is well under Groq's 25 MB limit
 
+// transcribeGroq sends the audio in groqChunkSec FLAC chunks. Each chunk is cut by its own ffmpeg call:
+// the segment muxer leaves FLAC headers without (or with the whole file's) duration, Groq bills by that
+// header, and a 65 min file then cost ~7500 s per attempt — over the 7200 s/hour free quota on every retry.
+// Finished chunks are cached by content, so a quota pause resumes instead of re-sending (and re-billing) them.
 func transcribeGroq(ctx context.Context, cfg Config, wavPath string) ([]Segment, error) {
 	if cfg.GroqAPIKey == "" {
 		return nil, errors.New("GROQ_API_KEY is not set")
 	}
+	fi, err := os.Stat(wavPath)
+	if err != nil {
+		return nil, err
+	}
+	total := float64(fi.Size()-44) / 32000 // 16 kHz mono s16 after the 44-byte header
 	dir, err := os.MkdirTemp(filepath.Dir(wavPath), "groq")
 	if err != nil {
 		return nil, err
 	}
 	defer os.RemoveAll(dir)
-	cmd := exec.CommandContext(ctx, tool("ffmpeg"), "-nostdin", "-loglevel", "error", "-i", wavPath,
-		"-ar", "16000", "-ac", "1", "-c:a", "flac", "-f", "segment", "-segment_time", strconv.Itoa(groqChunkSec),
-		filepath.Join(dir, "%04d.flac"))
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("ffmpeg split: %w: %s", err, tail(out))
+	cacheDir := filepath.Join(cfg.DataDir, "groq-cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return nil, err
 	}
 	var segs []Segment
-	offset := 0.0
-	for _, c := range groqChunks(dir) {
-		got, dur, err := groqChunk(ctx, cfg, c)
-		if err != nil {
-			return nil, fmt.Errorf("groq %s: %w", filepath.Base(c), err)
+	var cached []string
+	for i := 0; float64(i*groqChunkSec) < total; i++ {
+		offset := float64(i * groqChunkSec)
+		chunk := filepath.Join(dir, fmt.Sprintf("%04d.flac", i))
+		cmd := exec.CommandContext(ctx, tool("ffmpeg"), "-nostdin", "-loglevel", "error", "-ss", strconv.Itoa(i*groqChunkSec),
+			"-t", strconv.Itoa(groqChunkSec), "-i", wavPath, "-ar", "16000", "-ac", "1", "-c:a", "flac", chunk)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return nil, fmt.Errorf("ffmpeg chunk %d: %w: %s", i, err, tail(out))
 		}
+		got, cache, err := groqChunkCached(ctx, cfg, chunk, cacheDir)
+		if err != nil {
+			return nil, fmt.Errorf("groq chunk %d/%d: %w", i+1, int(math.Ceil(total/groqChunkSec)), err)
+		}
+		cached = append(cached, cache)
 		for _, s := range got {
 			segs = append(segs, Segment{s.Start + offset, s.End + offset, s.Text})
 		}
-		offset += cmp.Or(dur, groqChunkSec) // the segment muxer cuts on packet boundaries; trust the reported duration
+	}
+	for _, c := range cached {
+		os.Remove(c)
 	}
 	return segs, nil
 }
 
-// groqChunks lists the ffmpeg segment files in order. Only ffmpeg's own NNNN.flac names count: on exFAT/SMB
-// volumes macOS adds AppleDouble "._0000.flac" files next to them, which "*.flac" would pick up (and sort first).
-func groqChunks(dir string) []string {
-	chunks, _ := filepath.Glob(filepath.Join(dir, "[0-9][0-9][0-9][0-9].flac")) // sorted; names are zero-padded
-	return chunks
+// groqChunkCached returns the chunk's segments from DATA_DIR/groq-cache/<sha256>.json, or transcribes and caches them.
+func groqChunkCached(ctx context.Context, cfg Config, chunk, cacheDir string) ([]Segment, string, error) {
+	b, err := os.ReadFile(chunk)
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(b)
+	cache := filepath.Join(cacheDir, hex.EncodeToString(sum[:])+".json")
+	if data, err := os.ReadFile(cache); err == nil {
+		var segs []Segment
+		if json.Unmarshal(data, &segs) == nil {
+			return segs, cache, nil
+		}
+	}
+	segs, _, err := groqChunk(ctx, cfg, chunk)
+	if err != nil {
+		return nil, "", err
+	}
+	data, _ := json.Marshal(segs)
+	return segs, cache, os.WriteFile(cache, data, 0o644)
 }
 
 type groqSegment struct {

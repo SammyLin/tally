@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 )
@@ -57,6 +58,9 @@ func TestTranscribeGroq(t *testing.T) {
 			return
 		}
 		b, _ := io.ReadAll(f)
+		if d := flacDuration(t, b); d != "600" && d != "60" { // each chunk's own length, not N/A or the whole file's
+			t.Errorf("chunk header duration %q", d)
+		}
 		if string(b[:4]) != "fLaC" || r.Header.Get("Authorization") != "Bearer k" ||
 			r.FormValue("model") != "whisper-large-v3" || r.FormValue("language") != "zh" ||
 			r.FormValue("prompt") != zhPrompt || r.FormValue("response_format") != "verbose_json" ||
@@ -71,7 +75,8 @@ func TestTranscribeGroq(t *testing.T) {
 	}))
 	defer srv.Close()
 	groqURL = srv.URL
-	got, err := transcribeGroq(t.Context(), Config{GroqAPIKey: "k", GroqModel: "whisper-large-v3", WhisperLang: "zh"}, wav)
+	cfg := Config{GroqAPIKey: "k", GroqModel: "whisper-large-v3", WhisperLang: "zh", DataDir: t.TempDir()}
+	got, err := transcribeGroq(t.Context(), cfg, wav)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,6 +84,38 @@ func TestTranscribeGroq(t *testing.T) {
 	if fmt.Sprint(got) != fmt.Sprint(want) || calls != 3 {
 		t.Fatalf("got %v (calls %d) want %v", got, calls, want)
 	}
+
+	// quota hit on chunk 2: the retry must only send chunk 2 again
+	calls = 0
+	quota := true
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 2 && quota {
+			w.Header().Set("Retry-After", "116")
+			http.Error(w, "quota", http.StatusTooManyRequests)
+			return
+		}
+		fmt.Fprint(w, `{"duration":1,"segments":[{"start":1,"end":2,"text":"好。"}]}`)
+	})
+	if _, err := transcribeGroq(t.Context(), cfg, wav); err == nil {
+		t.Fatal("want quota error")
+	}
+	calls, quota = 0, false
+	if got, err = transcribeGroq(t.Context(), cfg, wav); err != nil || calls != 1 || len(got) != 2 {
+		t.Fatalf("resume: got %v err %v calls %d, want 2 segments from 1 call", got, err, calls)
+	}
+	if left, _ := filepath.Glob(filepath.Join(cfg.DataDir, "groq-cache", "*")); len(left) != 0 {
+		t.Fatalf("cache not cleaned: %v", left)
+	}
+}
+
+// flacDuration is what ffprobe (and Groq's billing) reads from the FLAC header.
+func flacDuration(t *testing.T, b []byte) string {
+	f := filepath.Join(t.TempDir(), "c.flac")
+	os.WriteFile(f, b, 0o600)
+	out, _ := exec.Command("ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", f).Output()
+	d, _, _ := strings.Cut(strings.TrimSpace(string(out)), ".")
+	return d
 }
 
 func TestDropPromptEcho(t *testing.T) {
@@ -114,19 +151,5 @@ func TestGroqQuota(t *testing.T) {
 		t.Fatal("want groqQuotaError")
 	} else if q, ok := errors.AsType[groqQuotaError](err); !ok || q.wait != 116*time.Second {
 		t.Fatalf("got %v, want groqQuotaError{116s}", err)
-	}
-}
-
-func TestGroqChunksSkipsAppleDouble(t *testing.T) {
-	dir := t.TempDir()
-	for _, n := range []string{"0001.flac", "._0000.flac", "0000.flac", "._0001.flac", "notes.txt"} {
-		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	got := groqChunks(dir)
-	want := []string{filepath.Join(dir, "0000.flac"), filepath.Join(dir, "0001.flac")}
-	if !slices.Equal(got, want) {
-		t.Fatalf("got %v want %v", got, want)
 	}
 }

@@ -7,3 +7,9 @@ web/node_modules/
 web/.wrangler/
 .dev.vars
 runner/.env.home
+
+# macOS: AppleDouble files on exFAT/SMB volumes, Finder metadata
+._*
+.DS_Store
+# sherpa dylibs belong in runner/lib/ (ignored); stray copies next to the binary
+runner/*.dylib

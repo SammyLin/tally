@@ -43,8 +43,11 @@ func main() {
 		err = backfillVoiceprints(ctx, cfg, true)
 	case cmd == "models" && len(args) == 0:
 		err = downloadModels(ctx, cfg)
+	case cmd == "version" && len(args) == 0:
+		rev, at := buildVersion()
+		fmt.Println(rev, at)
 	default:
-		err = errors.New("usage: tally [run] | tally ingest <folder> | tally voiceprints [--recompute] | tally models")
+		err = errors.New("usage: tally [run] | tally ingest <folder> | tally voiceprints [--recompute] | tally models | tally version")
 	}
 	if err != nil {
 		fatal(err)

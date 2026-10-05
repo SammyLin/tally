@@ -10,10 +10,13 @@ type Kind = keyof typeof ACTIVE;
 const kindOf = (s: string): Kind => (s.startsWith("rec") ? "recordings" : "summaries");
 const id = (s: string) => Number(s);
 
-// Records that a runner is alive; stt is only known on claim.
-const seen = (env: Env, runner: string, stt: unknown = null) =>
-  env.DB.prepare(`INSERT INTO runners(name, stt) VALUES(?1, ?2)
-    ON CONFLICT(name) DO UPDATE SET last_seen=datetime('now'), stt=coalesce(?2, stt)`).bind(runner, typeof stt === "string" ? stt : null);
+// Records that a runner is alive; stt and build version are only known on claim.
+const str = (v: unknown, max = 64) => (typeof v === "string" && v ? v.slice(0, max) : null);
+const seen = (env: Env, runner: string, info: { stt?: unknown; version?: unknown; version_time?: unknown } = {}) =>
+  env.DB.prepare(`INSERT INTO runners(name, stt, version, version_time) VALUES(?1, ?2, ?3, ?4)
+    ON CONFLICT(name) DO UPDATE SET last_seen=datetime('now'), stt=coalesce(?2, stt),
+      version=coalesce(?3, version), version_time=coalesce(?4, version_time)`)
+    .bind(runner, str(info.stt), str(info.version), str(info.version_time));
 
 // Extends the lease if this runner still holds the job; otherwise the runner must abort.
 async function hold(env: Env, kind: Kind, jid: number, runner: string, status: string | null = null) {
@@ -27,7 +30,7 @@ async function hold(env: Env, kind: Kind, jid: number, runner: string, status: s
 
 // Online = contacted within 3 min (idle runners poll every 10 s, busy ones heartbeat every 60 s).
 export async function listRunners(env: Env) {
-  const { results } = await env.DB.prepare(`SELECT r.name, r.last_seen, r.stt,
+  const { results } = await env.DB.prepare(`SELECT r.name, r.last_seen, r.stt, r.version, r.version_time,
       CAST(strftime('%s','now') - strftime('%s', r.last_seen) AS INTEGER) AS ago_s,
       coalesce(
         (SELECT json_object('kind','recording','id',id,'status',status,'title',title) FROM recordings
@@ -35,7 +38,7 @@ export async function listRunners(env: Env) {
         (SELECT json_object('kind','summary','id',s.id,'recording_id',s.recording_id,'status',s.status,'title',rc.title)
           FROM summaries s JOIN recordings rc ON rc.id=s.recording_id
           WHERE s.runner=r.name AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1)) AS job
-    FROM runners r ORDER BY r.last_seen DESC`).all<{ name: string; last_seen: string; stt: string | null; ago_s: number; job: string | null }>();
+    FROM runners r ORDER BY r.last_seen DESC`).all<{ name: string; last_seen: string; stt: string | null; version: string | null; version_time: string | null; ago_s: number; job: string | null }>();
   const q = await env.DB.prepare(`SELECT
       (SELECT count(*) FROM recordings WHERE status='queued' AND deleted_at IS NULL) AS recordings,
       (SELECT count(*) FROM summaries WHERE status='queued') AS summaries`).first<{ recordings: number; summaries: number }>();
@@ -75,9 +78,9 @@ async function recording(env: Env, rid: number) {
 
 export const runnerRoutes: [string, RegExp, Handler][] = [
   ["POST", /^\/api\/runner\/claim$/, async (req, env) => {
-    const body = await readJSON<{ runner?: unknown; stt?: unknown; skip_recordings?: unknown }>(req);
+    const body = await readJSON<{ runner?: unknown; stt?: unknown; version?: unknown; version_time?: unknown; skip_recordings?: unknown }>(req);
     const runner = runnerName(body);
-    await seen(env, runner, body.stt).run();
+    await seen(env, runner, body).run();
     // a runner works one job at a time, so a job still leased to this runner is left over from its previous run
     // one UPDATE…RETURNING per table: D1 runs statements serially, so two runners can never get the same row
     // skip_recordings: the runner's STT is paused (Groq quota), so it only takes summaries for now

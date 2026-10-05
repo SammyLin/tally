@@ -570,14 +570,22 @@ const spkColor = id => id==null?'var(--mute)':`var(--s${(id%8)+1})`;
 const noRunner=()=>S.runners&&!S.runners.runners.some(r=>r.online);
 const NO_RUNNER='目前沒有 runner 在線，會等 runner 上線後自動處理。';
 function ago(s){return s<60?'剛剛':s<3600?Math.floor(s/60)+' 分鐘前':s<86400?Math.floor(s/3600)+' 小時前':Math.floor(s/86400)+' 天前'}
-function runnerRow(r){
+// newest build among runners seen in the last week; older ones are flagged
+const latestBuild=rs=>rs.filter(r=>r.ago_s<7*86400&&r.version_time).map(r=>r.version_time).sort().at(-1);
+function versionBadge(r,latest){
+  if(!r.version)return h('span',{class:'badge busy',text:'版本未知（舊版）',title:'這台 runner 還沒更新到會回報版本的版本'});
+  const t=r.version_time?fmtDate(r.version_time):'';
+  const old=latest&&r.version_time&&r.version_time<latest;
+  return h('span',{class:'badge'+(old?' busy':''),title:`commit ${r.version}${t?' · '+t:''}`,text:(old?'需要更新 · ':'')+r.version+(t?' · '+t.slice(5):'')});
+}
+function runnerRow(r,latest){
   const j=r.job;
   const what=!r.online?'離線 · 最後連線 '+ago(r.ago_s)
     :!j?'閒置，等待工作'
     :j.kind==='recording'?`處理中：#${j.id}「${j.title}」· ${STATUS[j.status]||j.status}`
     :`產生摘要：#${j.recording_id}「${j.title}」`;
   return h('li',{class:'rrow'},h('span',{class:'rdot'+(r.online?' on':''),'aria-hidden':'true'}),
-    h('div',{},h('b',{text:r.name}),r.stt?h('span',{class:'badge',text:r.stt==='groq'?'Groq':'本機 Whisper'}):null,h('div',{class:'muted',text:what})));
+    h('div',{},h('b',{text:r.name}),r.stt?h('span',{class:'badge',text:r.stt==='groq'?'Groq':'本機 Whisper'}):null,versionBadge(r,latest),h('div',{class:'muted',text:what})));
 }
 function renderRunners(){
   const d=S.runners;if(!d)return;
@@ -590,7 +598,7 @@ function renderRunners(){
     b.title=on?`${on} 台 runner 在線`:'沒有 runner 在線';
   }
   $('#runnersQueue').textContent=`排隊中：${d.queued.recordings} 份錄音、${d.queued.summaries} 份摘要`;
-  $('#runnersList').replaceChildren(...(d.runners.length?d.runners.map(runnerRow):[h('li',{class:'muted',text:'還沒有 runner 連線過。'})]));
+  $('#runnersList').replaceChildren(...(d.runners.length?d.runners.map(r=>runnerRow(r,latestBuild(d.runners))):[h('li',{class:'muted',text:'還沒有 runner 連線過。'})]));
 }
 async function loadRunners(){
   try{S.runners=await api('/api/runners');renderRunners()}catch(e){console.error(e)}

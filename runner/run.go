@@ -15,7 +15,7 @@ import (
 var (
 	idleSleep      = 10 * time.Second
 	heartbeatEvery = 60 * time.Second // lease is 10 min
-	stopGrace      = 5 * time.Second // on SIGINT/SIGTERM the current job gets this long, then it is requeued; grace + requeue must fit launchd's 20 s ExitTimeOut
+	stopGrace      = 5 * time.Second  // on SIGINT/SIGTERM the current job gets this long, then it is requeued; grace + requeue must fit launchd's 20 s ExitTimeOut
 	errStopped     = errors.New("runner stopped")
 )
 
@@ -77,13 +77,14 @@ func run(ctx context.Context, cfg Config) error {
 	}
 	// work dirs of jobs that crashed here (and finished elsewhere); safe since this process owns DATA_DIR/work
 	os.RemoveAll(filepath.Join(cfg.DataDir, "work"))
-	slog.Info("runner started", "api", c.base, "runner", c.runner)
+	rev, revAt := buildVersion()
+	slog.Info("runner started", "api", c.base, "runner", c.runner, "version", rev, "built_from", revAt)
 	for ctx.Err() == nil {
 		var res struct {
 			Job *job `json:"job"`
 		}
 		skip := time.Now().Before(sttPausedUntil)
-		err := c.json(ctx, "POST", "/api/runner/claim", map[string]any{"runner": c.runner, "stt": cfg.STTProvider, "skip_recordings": skip}, &res)
+		err := c.json(ctx, "POST", "/api/runner/claim", map[string]any{"runner": c.runner, "stt": cfg.STTProvider, "skip_recordings": skip, "version": rev, "version_time": revAt}, &res)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("claim", "err", err)
 		}

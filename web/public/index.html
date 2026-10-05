@@ -184,7 +184,7 @@ details.menu summary::-webkit-details-marker{display:none}
 .cap-opts .row button{border:1px solid var(--line)!important}
 .cap-est{font-size:.78rem;color:var(--mute)}
 .cap-est.warn{color:var(--warn)}
-.cap-float{position:absolute;z-index:40;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:.5em .9em;border-radius:999px;box-shadow:var(--shadow);font-size:.85rem}
+.cap-float{user-select:none;position:absolute;z-index:40;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:.5em .9em;border-radius:999px;box-shadow:var(--shadow);font-size:.85rem}
 #capDlg{width:min(760px,calc(100vw - 32px))}
 #capDlg textarea{width:100%;height:min(60vh,520px);font:13px/1.55 var(--mono,ui-monospace,monospace);border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--sunk);color:var(--ink);resize:vertical}
 details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:5px;display:grid;min-width:180px;z-index:5;animation:pop .14s var(--ease)}
@@ -1377,6 +1377,7 @@ const capFloat=h('button',{type:'button',class:'cap-float primary',hidden:true},
 document.body.append(capFloat);
 function selRange(){
   const sel=getSelection();if(!sel||sel.isCollapsed||!S.d)return null;
+  const c=sel.getRangeAt(0).commonAncestorContainer;if(!(c.nodeType===1?c:c.parentElement)?.closest('.segs'))return null; // select-all etc.
   const a=sel.anchorNode?.parentElement?.closest('.seg'),b=sel.focusNode?.parentElement?.closest('.seg');
   if(!a||!b||!a.closest('.segs'))return null;
   const i=+a.dataset.i,j=+b.dataset.i;return [Math.min(i,j),Math.max(i,j)];

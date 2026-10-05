@@ -1,6 +1,6 @@
-// node test/voice.test.ts — voiceprint matching: threshold, margin, greedy, one person per recording.
+// node test/voice.test.ts — voiceprint matching: threshold, margin, greedy, one person per recording, suggestions.
 import assert from "node:assert/strict";
-import { isDefaultName, matchSpeakers } from "../src/voice.ts";
+import { isDefaultName, isEmbedding, isEmbModel, matchSpeakers } from "../src/voice.ts";
 
 const unit = (...v: number[]) => { const n = Math.hypot(...v); return v.map((x) => x / n); };
 // nearA(c): unit vector at cosine c to A
@@ -8,7 +8,8 @@ const nearA = (c: number) => [c, Math.sqrt(1 - c * c), 0];
 const A = { person_id: 1, embedding: [1, 0, 0] };
 const B = { person_id: 2, embedding: [0, 0, 1] };
 const sp = (id: number, embedding: number[], recording_id = 10) => ({ id, recording_id, embedding });
-const m = (...a: Parameters<typeof matchSpeakers>) => Object.fromEntries(matchSpeakers(...a));
+const m = (...a: Parameters<typeof matchSpeakers>) => Object.fromEntries(matchSpeakers(...a).auto);
+const sg = (...a: Parameters<typeof matchSpeakers>) => Object.fromEntries(matchSpeakers(...a).suggest);
 
 // threshold
 assert.deepEqual(m([sp(1, nearA(0.7))], [A, B], 0.6), { 1: 1 });
@@ -36,4 +37,17 @@ assert.deepEqual([...taken.get(10)!], [1]);
 
 assert.ok(isDefaultName("Speaker 1") && isDefaultName("Speaker 12"));
 assert.ok(!isDefaultName("Tammy") && !isDefaultName("Speaker") && !isDefaultName("Speaker 1a"));
+// suggestions: open speakers not auto-labelled whose best person ≥ suggestAt; score rounded to 2 decimals
+const none = new Map<number, Set<number>>();
+assert.deepEqual(sg([sp(1, nearA(0.55))], [A, B], 0.65, none, 0.5), { 1: { person_id: 1, score: 0.55 } }); // below threshold
+assert.deepEqual(sg([sp(1, nearA(0.45))], [A, B], 0.65, none, 0.5), {}); // below suggest
+assert.deepEqual(sg([sp(1, nearA(0.9))], [A, B], 0.65, none, 0.5), {}); // auto-labelled → no suggestion
+assert.deepEqual(sg([sp(1, between)], [A, B], 0.65, none, 0.5), { 1: { person_id: 1, score: 0.71 } }); // held back by margin
+// held back because the person is used in this recording (by a confirmed speaker or a better auto match)
+assert.deepEqual(sg([sp(1, nearA(0.8)), sp(2, nearA(0.95))], [A, B], 0.65, none, 0.5), { 1: { person_id: 1, score: 0.8 } });
+assert.deepEqual(sg([sp(1, nearA(0.9))], [A, B], 0.65, new Map([[10, new Set([1])]]), 0.5), { 1: { person_id: 1, score: 0.9 } });
+assert.deepEqual(sg([sp(1, nearA(0.55))], [A, B], 0.65), {}); // no suggestAt → no suggestions
+
+assert.ok(isEmbedding(Array(1024).fill(0.1)) && !isEmbedding(Array(1025).fill(0.1)) && !isEmbedding([1, NaN]) && !isEmbedding([]));
+assert.ok(isEmbModel(undefined) && isEmbModel(null) && isEmbModel("eres2net-large-zh-cn") && !isEmbModel("x".repeat(65)) && !isEmbModel("") && !isEmbModel(3));
 console.log("voice ok");

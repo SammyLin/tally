@@ -173,6 +173,7 @@ func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []
 		Label       string    `json:"label"`
 		DisplayName string    `json:"display_name"`
 		Embedding   []float32 `json:"embedding,omitempty"`
+		EmbModel    string    `json:"emb_model,omitempty"`
 	}
 	type segment struct {
 		StartMS int64  `json:"start_ms"`
@@ -188,7 +189,11 @@ func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []
 		if !ok {
 			k = len(speakers)
 			index[spk[i]] = k
-			speakers = append(speakers, speaker{fmt.Sprintf("SPEAKER_%02d", spk[i]), fmt.Sprintf("Speaker %d", k+1), embs[spk[i]]})
+			sp := speaker{Label: fmt.Sprintf("SPEAKER_%02d", spk[i]), DisplayName: fmt.Sprintf("Speaker %d", k+1), Embedding: embs[spk[i]]}
+			if sp.Embedding != nil {
+				sp.EmbModel = voiceModelID
+			}
+			speakers = append(speakers, sp)
 		}
 		out[i] = segment{int64(s.Start * 1000), int64(s.End * 1000), k, s.Text}
 	}

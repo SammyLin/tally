@@ -5,6 +5,7 @@ export interface Env {
   ACCESS_AUD: string;
   DEV_NO_AUTH?: string;
   VOICE_MATCH_THRESHOLD?: string;
+  VOICE_SUGGEST_THRESHOLD?: string;
 }
 
 export type Handler = (req: Request, env: Env, params: string[], url: URL) => Promise<unknown>;

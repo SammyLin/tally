@@ -11,11 +11,11 @@ import (
 	"strings"
 )
 
-// backfillVoiceprints computes speaker embeddings for done recordings whose speakers lack them (SPEC Voiceprints).
-// One failed recording is logged and skipped.
-func backfillVoiceprints(ctx context.Context, cfg Config) error {
-	if _, err := os.Stat(embModelPath(cfg)); err != nil {
-		return errors.New("speaker embedding model missing; run `tally models`")
+// backfillVoiceprints re-embeds, with the voice model, the speakers of done recordings that lack a voice-model
+// embedding, or every speaker if recompute (SPEC Speaker ID v2). One failed recording is logged and skipped.
+func backfillVoiceprints(ctx context.Context, cfg Config, recompute bool) error {
+	if _, err := os.Stat(voiceModelPath(cfg)); err != nil {
+		return errors.New("voice model missing; run `tally models`")
 	}
 	c := newClient(cfg)
 	var recs []struct {
@@ -31,7 +31,7 @@ func backfillVoiceprints(ctx context.Context, cfg Config) error {
 		if r.Status != "done" {
 			continue
 		}
-		n, err := backfillRecording(ctx, cfg, c, r.ID, r.Filename)
+		n, err := backfillRecording(ctx, cfg, c, r.ID, r.Filename, recompute)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -48,12 +48,12 @@ func backfillVoiceprints(ctx context.Context, cfg Config) error {
 }
 
 // backfillRecording returns how many speaker embeddings it posted (0 = nothing to do).
-func backfillRecording(ctx context.Context, cfg Config, c *client, id int64, filename string) (int, error) {
+func backfillRecording(ctx context.Context, cfg Config, c *client, id int64, filename string, recompute bool) (int, error) {
 	var d struct {
 		Speakers []struct {
-			ID           int64  `json:"id"`
-			HasEmbedding int    `json:"has_embedding"` // 0|1 from D1
-			Label        string `json:"label"`
+			ID       int64  `json:"id"`
+			EmbModel string `json:"emb_model"` // null when no embedding
+			Label    string `json:"label"`
 		} `json:"speakers"`
 		Segments []struct {
 			StartMS   int64  `json:"start_ms"`
@@ -66,7 +66,7 @@ func backfillRecording(ctx context.Context, cfg Config, c *client, id int64, fil
 	}
 	want := map[int64]bool{}
 	for _, s := range d.Speakers {
-		if s.HasEmbedding == 0 && s.Label != "custom" { // custom = segment-scope speaker, never enrolled
+		if (recompute || s.EmbModel != voiceModelID) && s.Label != "custom" { // custom = segment-scope speaker, never enrolled
 			want[s.ID] = true
 		}
 	}
@@ -105,10 +105,11 @@ func backfillRecording(ctx context.Context, cfg Config, c *client, id int64, fil
 	type item struct {
 		ID        int64     `json:"id"`
 		Embedding []float32 `json:"embedding"`
+		EmbModel  string    `json:"emb_model"`
 	}
 	var items []item
 	for sid, e := range embs {
-		items = append(items, item{sid, e})
+		items = append(items, item{sid, e, voiceModelID})
 	}
 	return len(items), c.json(ctx, "POST", fmt.Sprintf("/api/runner/recordings/%d/speaker-embeddings", id),
 		map[string]any{"runner": c.runner, "speakers": items}, nil)

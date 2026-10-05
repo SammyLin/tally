@@ -25,6 +25,9 @@ func downloadModels(ctx context.Context, cfg Config) error {
 	if err := fetch(ctx, embModelURL, embModelPath(cfg), nil); err != nil {
 		return err
 	}
+	if err := fetch(ctx, voiceModelURL, voiceModelPath(cfg), nil); err != nil {
+		return err
+	}
 	return fetch(ctx, segModelURL, segModelPath(cfg), untarFile("model.onnx"))
 }
 

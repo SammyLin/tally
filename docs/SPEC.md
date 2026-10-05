@@ -297,3 +297,57 @@ Runner:
 UI:
 - Auto-labelled speaker shows a small「自動」tag next to the name (title: 依聲紋自動辨識，點擊可更正). Popover unchanged; saving confirms.
 - Speaker popover "Recently used names" stays; no separate voiceprint management page yet.
+
+## Speaker ID v2 — decided 2026-10-05, SUPERSEDES the Voiceprints model/threshold/runner parts above
+
+Why: campplus scores the same person across recordings lower than two different people (Sammy rec 3 vs rec 8: 0.45), and sherpa over-segments (rec 8: 2 people → 55+ clusters), so prints come from fragments. Evidence: `/private/tmp/claude-501/tally-spk/REPORT.md`. Binary is `tally` (`runner/main.go`); commands below are `tally …` run from `runner/`.
+
+### Models and model id
+- Diarization keeps `3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx` (fast, ~1 s per audio-minute). Model id of embeddings made with it: `campplus-zh-cn` (legacy).
+- Voiceprints (per-speaker embeddings, backfill) switch to `3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx`, 512 dims, ~111 MB, ~4.4 s per audio-minute. URL: `https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx` (sic "recongition"). Model id: `eres2net-large-zh-cn`.
+- Runner: `voiceModelURL` + `voiceModelPath(cfg)` (`DATA_DIR/models/<basename>`) next to `embModelURL`/`embModelPath`; `tally models` also fetches it. `speakerEmbeddings` and `tally voiceprints` use the voice model; `diarize`, `mergeTurns`, `splitCollapsed` keep campplus. Voice model missing → no embeddings (warn), job still succeeds.
+- Worker constant `VOICE_MODEL = "eres2net-large-zh-cn"`. Embeddings are compared only when both have `emb_model = VOICE_MODEL`; anything else is stored but never matched, enrolled into matching, or suggested. An embedding posted without `emb_model` is `campplus-zh-cn` (the old home-macmini runner keeps working; its speakers simply get no auto labels until `tally voiceprints` re-embeds them).
+
+### Runner → Worker
+- `POST /api/runner/recordings/{id}/transcript`: `speakers[]` gains `emb_model` (string, required when `embedding` is set by a new runner). `embedding` = ONE L2-normalized mean per speaker: per-span embeddings (each span L2-normalized) averaged over **all** of the speaker's clean spans (`voiceSpans`: trim 0.25 s / 0.5 s, ≥ 1 s), longest first, capped at `voiceprintSec = 600` (bounds time on very long files), then L2-normalized. No per-segment lists.
+- JSON compact: each float rounded to 4 decimals (`math.Round(v*1e4)/1e4`), ≈ 4 KB per speaker, far under D1's 2 MB/value. Worker rejects `embedding` length > 1024 or non-finite (tighten `isEmbedding`), `emb_model` longer than 64 chars.
+- `POST /api/runner/recordings/{id}/speaker-embeddings`: items `{id, embedding, emb_model?}` (same defaulting). Worker never overwrites a speaker's `VOICE_MODEL` embedding with one of another model (`UPDATE … WHERE id=? AND recording_id=? AND (emb_model IS NOT ?current OR ?new = ?current)`), so an old runner cannot pollute.
+- `GET /api/recordings/{id}` speakers gain `emb_model` (NULL when no embedding); keep `has_embedding` for old runners.
+
+### Schema (migration 0005)
+```sql
+ALTER TABLE speakers ADD COLUMN emb_model TEXT;                          -- id of the model that made `embedding`
+UPDATE speakers SET emb_model='campplus-zh-cn' WHERE embedding IS NOT NULL;
+ALTER TABLE speakers ADD COLUMN suggest_person_id INTEGER REFERENCES people(id) ON DELETE SET NULL;
+ALTER TABLE speakers ADD COLUMN suggest_score REAL;
+ALTER TABLE voiceprints ADD COLUMN emb_model TEXT NOT NULL DEFAULT 'campplus-zh-cn';
+```
+Multiple prints per person = one per enrolled speaker (unchanged, `speaker_id UNIQUE`); one print per speaker. Enrolment on rename is unchanged except `enrol` copies `emb_model` with `embedding` (insert and ON CONFLICT update). Only `auto=0`, non-default-named, non-`custom` speakers are ever enrolled; auto labels never become prints.
+
+### Matching (Worker `rematch`/`matchSpeakers`)
+- Candidates: speakers with `emb_model = VOICE_MODEL`, open = `auto=1`, or `auto=0` with a default `Speaker N` name. `auto=2` (rejected/dismissed) gets neither auto label nor suggestion.
+- Prints: only `emb_model = VOICE_MODEL`. Person score = max cosine over that person's prints.
+- Auto-label: top score ≥ `VOICE_MATCH_THRESHOLD` (var, **0.65**) and ≥ `MARGIN` (0.05) over the runner-up person; greedy by score, a person at most once per recording (persons confirmed in that recording are taken) → name, person_id, auto=1 (as today).
+- Suggest: an open speaker NOT auto-labelled whose top person scores ≥ `VOICE_SUGGEST_THRESHOLD` (var, **0.50**) — including those blocked by threshold, margin or "person already used" — gets `suggest_person_id`, `suggest_score` (rounded to 2 decimals). All other speakers get both NULL. Rematch writes suggest columns only when they change (same guarded UPDATE).
+- `wrangler.jsonc` vars: `VOICE_MATCH_THRESHOLD: "0.65"`, `VOICE_SUGGEST_THRESHOLD: "0.50"`. Starting values from 4 people; retune with more labels.
+- Recording detail: `speakers[].suggest = {person_id, name, score} | null` (join people). Never return embeddings.
+
+### UI
+- Speaker with `suggest`: chip「可能是 X？」next to its name with ✓ and ✕.
+  - ✓ = existing `POST /api/segments/{any segment of that speaker}/speaker` `{name: X, scope: "all"}` → confirms, enrols another print, rematches.
+  - ✕ = same endpoint with `{name: <its current default name>, scope: "all"}` → auto=2 (existing semantics), suggestion cleared. No new endpoint.
+- 「自動」tag for auto=1 unchanged.
+
+### Backfill
+- `tally voiceprints`: for done recordings, re-embed non-`custom` speakers whose `emb_model` ≠ `eres2net-large-zh-cn` (incl. none) using their current segments; POST with `emb_model`.
+- `tally voiceprints --recompute`: same, but every non-`custom` speaker of every done recording.
+- Worker (speaker-embeddings, unchanged flow): store, re-enrol the recording's confirmed speakers (auto=0, non-default name) with the new embedding — names untouched — then `rematch` all. Old-model prints stay but are ignored. Never renames confirmed speakers or deletes data.
+- Rollout: migrate D1 + deploy Worker → build/restart this Mac's runner → `tally models` → `tally voiceprints --recompute`. Re-run `tally voiceprints` after home-macmini processes anything until it is updated.
+
+### Diarization (runner/diarize.go)
+- Keep sherpa FastClustering threshold 0.5, campplus.
+- New `mergeTurns` after all chunks (replaces `linkSpeakers`): chunk-local labels become unique global labels (chunk index offset); embed each turn ≥ 1 s with the campplus extractor already open; cluster mean = duration-weighted sum of normalized turn embeddings; repeatedly merge the most similar pair of clusters while cosine > **0.5**; then fold every cluster with < **30 s** of turns into the most similar cluster ≥ 30 s (skip folding if none is ≥ 30 s). Turns of clusters with no ≥ 1 s turn are dropped (their segments take the nearest turn in `assignSpeakers`). Relabel 0..n-1 by first appearance. Cost ≈ 1 s per audio-minute. One test in `diarize_test.go` on synthetic vectors (merge + fold).
+- `diarizeChunkSec = 15 * 60` (was 30 min; sherpa cost grows faster than length, merge links chunks).
+- `NumThreads` = performance-core count (`sysctl hw.perflevel0.physicalcpu`, fallback 4) for segmentation and all extractors. Not `runtime.NumCPU()`: on a 4P+6E Mac, 10 onnxruntime threads made sherpa 4x slower than 4 (rec 3, 13 min: 274 s → 66 s for diarize + voiceprint, measured 2026-10-05). Sherpa itself costs ~3 s per audio-minute (sliding windows overlap), not ~1.
+- `splitCollapsed` unchanged (only runs on a single-speaker result; not the slowness cause). Never run two runners or a runner + sweep on one Mac.
+- Existing recordings keep their old speaker split (no re-diarization); `--recompute` only re-embeds.

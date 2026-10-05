@@ -11,7 +11,7 @@
   "r2_buckets": [{ "binding": "AUDIO", "bucket_name": "noteapp-audio" }],
   // ACCESS_TEAM = <team> of <team>.cloudflareaccess.com, ACCESS_AUD = Access app audience tag. Unset → API answers 503.
   // VOICE_MATCH_THRESHOLD = min cosine for auto-labelling a speaker from a voiceprint.
-  "vars": { "VOICE_MATCH_THRESHOLD": "0.75", "ACCESS_TEAM": "3mi", "ACCESS_AUD": "0cf4c83df1ba97488cd09b937aeafe8f11fe463659bbaf2f537504e8d13dd486" },
+  "vars": { "VOICE_MATCH_THRESHOLD": "0.65", "VOICE_SUGGEST_THRESHOLD": "0.50", "ACCESS_TEAM": "3mi", "ACCESS_AUD": "0cf4c83df1ba97488cd09b937aeafe8f11fe463659bbaf2f537504e8d13dd486" },
   "routes": [{ "pattern": "records.3mi.ai", "custom_domain": true }],
   "workers_dev": false,
   "preview_urls": false,

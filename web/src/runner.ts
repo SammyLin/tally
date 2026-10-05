@@ -1,6 +1,6 @@
 // Runner job API: jobs are claimed with a lease; a lease that expires makes the job claimable again.
 import { type Env, type Handler, HttpError, first, parseParts, partNumber, readJSON, runnerName, serveR2, splitFilename } from "./http";
-import { enrol, isDefaultName, isEmbedding, rematch } from "./voice";
+import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
 const LEASE = `datetime('now','+10 minutes')`;
 const ACTIVE = { recordings: `status IN ('converting','transcribing','cleaning')`, summaries: `status='running'` };
@@ -160,8 +160,8 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const speakers = body.speakers ?? [];
     const segments = body.segments ?? [];
     if (!Array.isArray(speakers) || !speakers.every((s) => typeof s?.label === "string" && typeof s?.display_name === "string"
-      && (s.embedding == null || isEmbedding(s.embedding))))
-      throw new HttpError(400, "speakers: [{label, display_name, embedding?: number[]}] required");
+      && (s.embedding == null || isEmbedding(s.embedding)) && isEmbModel(s.emb_model)))
+      throw new HttpError(400, "speakers: [{label, display_name, embedding?: number[≤1024], emb_model?: string}] required");
     if (!Array.isArray(segments) || !segments.every((s) => Number.isFinite(s?.start_ms) && Number.isFinite(s?.end_ms) && typeof s?.text_raw === "string"))
       throw new HttpError(400, "segments: [{start_ms, end_ms, speaker, text_raw}] required");
     await hold(env, "recordings", rid, runnerName(body));
@@ -171,8 +171,10 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       db.prepare(`DELETE FROM segments WHERE recording_id=?`).bind(rid),
       db.prepare(`DELETE FROM speakers WHERE recording_id=?`).bind(rid),
       db.prepare(`UPDATE recordings SET duration_s=? WHERE id=?`).bind(typeof body.duration_s === "number" ? body.duration_s : null, rid),
-      db.prepare(`INSERT INTO speakers(recording_id, label, display_name, embedding)
-        SELECT ?1, value->>'label', value->>'display_name', nullif(value->'embedding', 'null') FROM json_each(?2) ORDER BY key`).bind(rid, JSON.stringify(speakers)),
+      db.prepare(`INSERT INTO speakers(recording_id, label, display_name, embedding, emb_model)
+        SELECT ?1, value->>'label', value->>'display_name', nullif(value->'embedding', 'null'), value->>'emb_model' FROM json_each(?2) ORDER BY key`)
+        .bind(rid, JSON.stringify(speakers.map((s) => ({ label: s.label, display_name: s.display_name,
+          embedding: s.embedding ?? null, emb_model: s.embedding == null ? null : s.emb_model ?? LEGACY_MODEL })))),
       ...chunks(segments.map((s) => [Math.round(s.start_ms), Math.round(s.end_ms), Number.isInteger(s.speaker) ? s.speaker : null, s.text_raw])).map((c) =>
         db.prepare(`WITH sp AS (SELECT id, row_number() OVER (ORDER BY id) - 1 AS idx FROM speakers WHERE recording_id=?1)
           INSERT INTO segments(recording_id, start_ms, end_ms, speaker_id, text_raw)
@@ -190,17 +192,19 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const rid = id(rs);
     const body = await readJSON<{ speakers?: unknown }>(req);
     const items = body.speakers;
-    if (!Array.isArray(items) || !items.every((s) => Number.isInteger(s?.id) && isEmbedding(s.embedding)))
-      throw new HttpError(400, "speakers: [{id, embedding: number[]}] required");
+    if (!Array.isArray(items) || !items.every((s) => Number.isInteger(s?.id) && isEmbedding(s.embedding) && isEmbModel(s.emb_model)))
+      throw new HttpError(400, "speakers: [{id, embedding: number[≤1024], emb_model?: string}] required");
     await recording(env, rid);
     const db = env.DB;
+    // never replace a VOICE_MODEL embedding with another model's (an old runner's backfill)
     const stored = items.length ? (await db.batch(items.map((s) =>
-      db.prepare(`UPDATE speakers SET embedding=? WHERE id=? AND recording_id=?`).bind(JSON.stringify(s.embedding), s.id, rid))))
+      db.prepare(`UPDATE speakers SET embedding=?1, emb_model=?2 WHERE id=?3 AND recording_id=?4 AND (emb_model IS NOT ?5 OR ?2 = ?5)`)
+        .bind(JSON.stringify(s.embedding), s.emb_model ?? LEGACY_MODEL, s.id, rid, VOICE_MODEL))))
       .reduce((n, r) => n + r.meta.changes, 0) : 0;
-    const { results } = await db.prepare(`SELECT id, display_name FROM speakers WHERE recording_id=? AND auto=0 AND embedding IS NOT NULL`)
+    const { results } = await db.prepare(`SELECT id, display_name FROM speakers WHERE recording_id=? AND auto=0 AND label<>'custom' AND embedding IS NOT NULL`)
       .bind(rid).all<{ id: number; display_name: string }>();
     const named = results.filter((s) => !isDefaultName(s.display_name));
-    if (named.length) await db.batch(named.flatMap((s) => enrol(db, s.id, s.display_name)));
+    if (named.length) await db.batch(named.flatMap((s) => enrol(db, s.id, s.display_name, true)));
     return { stored, enrolled: named.length, relabelled: await rematch(env) };
   }],
 

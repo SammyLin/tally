@@ -224,6 +224,8 @@ details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(-
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{width:10px;height:10px;border-radius:3px;background:var(--c)}
 .legend b{color:var(--ink2);font-weight:600}
+.legend .sug{gap:2px;padding:0 2px 0 8px;border-radius:99px;background:var(--sig-soft);color:var(--ink2)}
+.legend .sug button{border:0;background:transparent;padding:0 5px;min-height:0;line-height:1.5;color:inherit;font:inherit}
 .keys{font-size:.72rem;color:var(--faint)}
 .keys kbd{font-family:var(--mono);font-size:.7rem;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--mute)}
 .banner{display:flex;gap:8px;align-items:center;font-size:.8rem;color:var(--mute);margin:10px 0 8px;flex-wrap:wrap}
@@ -1110,8 +1112,13 @@ function renderTranscript(pane){
   // talk time per speaker, largest first
   const share=new Map();let total=0;
   for(const s of segments){const d=s.end_ms-s.start_ms;total+=d;share.set(s.speaker_id,(share.get(s.speaker_id)||0)+d)}
-  if(share.size>1)pane.append(h('div',{class:'legend','aria-label':'講者發言比例'},[...share].sort((a,b)=>b[1]-a[1]).map(([id,d])=>
-    h('span',{style:`--c:${spkColor(id)}`},h('i'),h('b',{text:id!=null?(names[id]||'未知講者'):'未知講者'}),h('span',{class:'mono',text:Math.round(d/total*100)+'%'})))));
+  // a voiceprint suggestion ("可能是 X？") sits next to its speaker; ✓ names the speaker X, ✕ keeps its default name (= dismiss)
+  const sugs=new Map(speakers.filter(s=>s.suggest&&share.has(s.id)).map(s=>[s.id,s]));
+  const sugChip=sp=>h('span',{class:'sug',title:`聲紋相似度 ${sp.suggest.score}`},`可能是 ${sp.suggest.name}？`,
+    h('button',{type:'button',text:'✓','aria-label':`確認是 ${sp.suggest.name}`,onclick:e=>decideSuggest(sp,sp.suggest.name,e.currentTarget)}),
+    h('button',{type:'button',text:'✕','aria-label':'不是','title':'不是',onclick:e=>decideSuggest(sp,sp.display_name,e.currentTarget)}));
+  if(share.size>1||sugs.size)pane.append(h('div',{class:'legend','aria-label':'講者發言比例'},[...share].sort((a,b)=>b[1]-a[1]).map(([id,d])=>
+    h('span',{style:`--c:${spkColor(id)}`},h('i'),h('b',{text:id!=null?(names[id]||'未知講者'):'未知講者'}),h('span',{class:'mono',text:Math.round(d/total*100)+'%'}),sugs.has(id)?sugChip(sugs.get(id)):null))));
   const cleaned=segments.some(s=>s.text_clean!=null);
   pane.append(h('div',{class:'banner'},
     cleaned?[h('span',{text:S.showRaw?'正在檢視原始逐字稿':'逐字稿已整理'}),'·',
@@ -1304,6 +1311,14 @@ async function openSpeaker(seg,name,btn){
   }catch{rec.replaceChildren()}
 }
 $('#spkCancel').onclick=()=>dlg.close();
+async function decideSuggest(sp,name,btn){
+  const seg=S.d.segments.find(x=>x.speaker_id===sp.id);if(!seg)return;
+  btn.disabled=true;
+  try{
+    const d=await api(`/api/segments/${seg.id}/speaker`,{method:'POST',body:{name,scope:'all'}});
+    if(d&&d.recording&&d.recording.id===S.id){S.d=d;renderDetail()}else loadDetail();
+  }catch(err){fail(err);btn.disabled=false}
+}
 $('#spkForm').onsubmit=async e=>{
   e.preventDefault();
   const name=$('#spkName').value.trim();if(!name)return;

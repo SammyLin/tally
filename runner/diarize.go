@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"math"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
+	"syscall"
 
 	sherpa "github.com/k2-fsa/sherpa-onnx-go-macos"
 )
@@ -25,6 +25,10 @@ type Turn struct {
 const (
 	segModelURL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2"
 	embModelURL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh-cn_16k-common.onnx"
+	// voiceModelURL makes voiceprints (SPEC Speaker ID v2): slower than campplus but keeps one person
+	// apart from others across recordings. Diarization keeps campplus.
+	voiceModelURL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_eres2net_large_sv_zh-cn_3dspeaker_16k.onnx"
+	voiceModelID  = "eres2net-large-zh-cn" // emb_model sent with every voiceprint embedding
 )
 
 func segModelPath(cfg Config) string {
@@ -34,6 +38,19 @@ func segModelPath(cfg Config) string {
 func embModelPath(cfg Config) string {
 	return filepath.Join(cfg.DataDir, "models", filepath.Base(embModelURL))
 }
+
+func voiceModelPath(cfg Config) string {
+	return filepath.Join(cfg.DataDir, "models", filepath.Base(voiceModelURL))
+}
+
+// onnxThreads is the performance-core count. onnxruntime threads that spill onto efficiency cores stall its
+// intra-op sync: on a 4P+6E M-series Mac, 10 threads made sherpa diarization 4x slower than 4 (measured 2026-10-05).
+var onnxThreads = func() int {
+	if n, err := syscall.SysctlUint32("hw.perflevel0.physicalcpu"); err == nil && n > 0 {
+		return int(n)
+	}
+	return 4
+}()
 
 var warnNoModels = sync.OnceFunc(func() {
 	slog.Warn("diarization models missing, using a single speaker; run `tally models`")
@@ -54,9 +71,9 @@ func diarize(ctx context.Context, cfg Config, wavPath string) ([]Turn, error) {
 	c := sherpa.OfflineSpeakerDiarizationConfig{
 		Segmentation: sherpa.OfflineSpeakerSegmentationModelConfig{
 			Pyannote:   sherpa.OfflineSpeakerSegmentationPyannoteModelConfig{Model: seg},
-			NumThreads: 4,
+			NumThreads: onnxThreads,
 		},
-		Embedding:      sherpa.SpeakerEmbeddingExtractorConfig{Model: emb, NumThreads: 4},
+		Embedding:      sherpa.SpeakerEmbeddingExtractorConfig{Model: emb, NumThreads: onnxThreads},
 		Clustering:     sherpa.FastClusteringConfig{NumClusters: cfg.NumSpeakers, Threshold: 0.5},
 		MinDurationOn:  0.3,
 		MinDurationOff: 0.5,
@@ -79,16 +96,8 @@ func diarize(ctx context.Context, cfg Config, wavPath string) ([]Turn, error) {
 		return nil, fmt.Errorf("diarize: %s is %d Hz, want %d", wavPath, w.rate, sd.SampleRate())
 	}
 	chunk := diarizeChunkSec * w.rate
-	var ex *sherpa.SpeakerEmbeddingExtractor
-	if w.n > chunk {
-		if ex = sherpa.NewSpeakerEmbeddingExtractor(&c.Embedding); ex == nil {
-			return nil, errors.New("sherpa-onnx: cannot create embedding extractor")
-		}
-		defer sherpa.DeleteSpeakerEmbeddingExtractor(ex)
-	}
 	var turns []Turn
-	var cents [][]float32 // global speakers: sum of linked embeddings
-	for off := 0; off < w.n; off += chunk {
+	for ci, off := 0, 0; off < w.n; ci, off = ci+1, off+chunk {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -99,63 +108,173 @@ func diarize(ctx context.Context, cfg Config, wavPath string) ([]Turn, error) {
 		if err != nil {
 			return nil, err
 		}
-		segs := sd.Process(x)
-		var m map[int]int
-		if ex != nil {
-			m = linkSpeakers(ex, w.rate, x, segs, &cents)
-		}
 		t0 := float64(off) / float64(w.rate)
-		for _, s := range segs {
-			g, ok := s.Speaker, true
-			if m != nil {
-				g, ok = m[s.Speaker]
-			}
-			if ok {
-				turns = append(turns, Turn{t0 + float64(s.Start), t0 + float64(s.End), g})
-			}
+		for _, s := range sd.Process(x) { // chunk-local labels made global
+			turns = append(turns, Turn{t0 + float64(s.Start), t0 + float64(s.End), ci<<16 + s.Speaker})
 		}
 	}
-	return turns, nil
+
+	ex := sherpa.NewSpeakerEmbeddingExtractor(&c.Embedding)
+	if ex == nil {
+		return nil, errors.New("sherpa-onnx: cannot create embedding extractor")
+	}
+	defer sherpa.DeleteSpeakerEmbeddingExtractor(ex)
+	embs := make([][]float32, len(turns))
+	for i, t := range turns {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		a, b := int(t.Start*float64(w.rate)), int(t.End*float64(w.rate))
+		if b-a < w.rate {
+			continue
+		}
+		x, err := w.read(a, b-a)
+		if err != nil {
+			return nil, err
+		}
+		if len(x) >= w.rate {
+			embs[i] = embed(ex, w.rate, x)
+		}
+	}
+	return mergeTurns(turns, embs), nil
 }
 
 // diarizeChunkSec bounds memory and time: sherpa clusters every ~1 s window of its input at once (O(n²)
-// distance matrix, >100 GB for 24 h). Longer files are diarized per chunk and speakers linked by embedding.
-var diarizeChunkSec = 30 * 60
+// distance matrix, >100 GB for 24 h, and superlinear time). Longer files are diarized per chunk and
+// mergeTurns links the chunks' speakers.
+var diarizeChunkSec = 15 * 60
 
-const linkSim = 0.5 // cosine above which a chunk speaker joins an existing global speaker
+const (
+	mergeSim  = 0.5 // clusters whose mean embeddings are more similar than this are one speaker
+	minSpkSec = 30. // clusters with less speech fold into the most similar larger one
+)
 
-// linkSpeakers maps a chunk's local speakers to global ones using an embedding of up to 60 s of each
-// speaker's audio. Speakers with under 1 s of audio are left out (their segments take the nearest turn).
-func linkSpeakers(ex *sherpa.SpeakerEmbeddingExtractor, rate int, x []float32, segs []sherpa.OfflineSpeakerDiarizationSegment, cents *[][]float32) map[int]int {
-	audio := map[int][]float32{}
-	for _, s := range segs {
-		a, b := int(s.Start*float32(rate)), min(int(s.End*float32(rate)), len(x))
-		if a < b && len(audio[s.Speaker]) < 60*rate {
-			audio[s.Speaker] = append(audio[s.Speaker], x[a:b]...)
-		}
+// mergeTurns fixes sherpa's over-segmentation (one person split into many clusters, within and across
+// chunks). embs[i] is turns[i]'s embedding, nil for turns under 1 s. A cluster's mean is the
+// duration-weighted sum of its normalized turn embeddings. The most similar pair is merged while its cosine
+// exceeds mergeSim; then clusters under minSpkSec fold into their most similar cluster of at least
+// minSpkSec (if any). Clusters without an embedded turn are dropped (their segments take the nearest turn).
+// Labels are renumbered 0..n-1 by first appearance.
+// ponytail: O(n³) cheap compares + O(n²·dim) cosines; ~1 s at 800 clusters (≈10 h of audio).
+func mergeTurns(turns []Turn, embs [][]float32) []Turn {
+	type cluster struct {
+		sum []float32
+		dur float64
 	}
-	m := map[int]int{}
-	for _, k := range slices.Sorted(maps.Keys(audio)) {
-		if len(audio[k]) < rate {
+	cs := map[int]*cluster{}
+	for i, t := range turns {
+		c := cs[t.Speaker]
+		if c == nil {
+			c = &cluster{}
+			cs[t.Speaker] = c
+		}
+		d := t.End - t.Start
+		c.dur += d
+		if embs[i] == nil {
 			continue
 		}
-		e := embed(ex, rate, audio[k])
-		best, sim := -1, linkSim
-		for j, c := range *cents {
-			if s := cosine(e, c); s > sim {
-				best, sim = j, s
+		if c.sum == nil {
+			c.sum = make([]float32, len(embs[i]))
+		}
+		w := float32(d / max(norm(embs[i]), 1e-12))
+		for k, v := range embs[i] {
+			c.sum[k] += w * v
+		}
+	}
+	parent := map[int]int{} // merged cluster → the cluster it went into
+	find := func(l int) int {
+		for {
+			p, ok := parent[l]
+			if !ok {
+				return l
+			}
+			l = p
+		}
+	}
+	merge := func(from, into int) {
+		for k, v := range cs[from].sum {
+			cs[into].sum[k] += v
+		}
+		cs[into].dur += cs[from].dur
+		parent[from] = into
+	}
+	live := func() []int {
+		var ls []int
+		for l, c := range cs {
+			if _, gone := parent[l]; !gone && c.sum != nil {
+				ls = append(ls, l)
 			}
 		}
-		if best < 0 {
-			best = len(*cents)
-			*cents = append(*cents, make([]float32, len(e)))
-		}
-		for i, v := range e {
-			(*cents)[best][i] += v
-		}
-		m[k] = best
+		slices.Sort(ls)
+		return ls
 	}
-	return m
+	// pairwise similarity matrix; a merge only recomputes the surviving cluster's row
+	ids := live()
+	sim := make([][]float64, len(ids))
+	for i := range ids {
+		sim[i] = make([]float64, len(ids))
+		for j := range i {
+			sim[i][j] = cosine(cs[ids[i]].sum, cs[ids[j]].sum)
+			sim[j][i] = sim[i][j]
+		}
+	}
+	dead := make([]bool, len(ids))
+	for {
+		a, b, best := -1, -1, mergeSim
+		for i := range ids {
+			for j := i + 1; j < len(ids); j++ {
+				if !dead[i] && !dead[j] && sim[i][j] > best {
+					a, b, best = i, j, sim[i][j]
+				}
+			}
+		}
+		if a < 0 {
+			break
+		}
+		merge(ids[b], ids[a])
+		dead[b] = true
+		for j := range ids {
+			if !dead[j] && j != a {
+				sim[a][j] = cosine(cs[ids[a]].sum, cs[ids[j]].sum)
+				sim[j][a] = sim[a][j]
+			}
+		}
+	}
+	ls := live()
+	var big []int
+	for _, l := range ls {
+		if cs[l].dur >= minSpkSec {
+			big = append(big, l)
+		}
+	}
+	if len(big) > 0 {
+		for _, l := range ls {
+			if cs[l].dur >= minSpkSec {
+				continue
+			}
+			into := slices.MaxFunc(big, func(x, y int) int {
+				return cmp.Compare(cosine(cs[l].sum, cs[x].sum), cosine(cs[l].sum, cs[y].sum))
+			})
+			merge(l, into)
+		}
+	}
+	var out []Turn
+	for _, t := range turns {
+		if t.Speaker = find(t.Speaker); cs[t.Speaker].sum != nil {
+			out = append(out, t)
+		}
+	}
+	slices.SortStableFunc(out, func(x, y Turn) int { return cmp.Compare(x.Start, y.Start) })
+	label := map[int]int{}
+	for i, t := range out {
+		k, ok := label[t.Speaker]
+		if !ok {
+			k = len(label)
+			label[t.Speaker] = k
+		}
+		out[i].Speaker = k
+	}
+	return out
 }
 
 func embed(ex *sherpa.SpeakerEmbeddingExtractor, rate int, x []float32) []float32 {
@@ -270,7 +389,7 @@ func splitCollapsed(cfg Config, wavPath string, segs []Segment, spk []int) []int
 	if _, err := os.Stat(embModelPath(cfg)); err != nil {
 		return spk
 	}
-	ex := sherpa.NewSpeakerEmbeddingExtractor(&sherpa.SpeakerEmbeddingExtractorConfig{Model: embModelPath(cfg), NumThreads: 4})
+	ex := sherpa.NewSpeakerEmbeddingExtractor(&sherpa.SpeakerEmbeddingExtractorConfig{Model: embModelPath(cfg), NumThreads: onnxThreads})
 	if ex == nil {
 		return spk
 	}
@@ -372,17 +491,18 @@ func split2(e [][]float32) ([]int, float64) {
 	return lab, within/nw - between/nb
 }
 
-const voiceprintSec = 60.0 // audio per speaker that goes into its voiceprint
+const voiceprintSec = 600.0 // audio per speaker that goes into its voiceprint (bounds time on long files)
 
-// speakerEmbeddings computes one L2-normalized voiceprint per speaker (spk[i] is segs[i]'s speaker): the mean of
-// per-segment embeddings over up to voiceprintSec of that speaker's longest segments. Speakers without a segment
-// long enough get none; nil (no error) if the embedding model is missing.
+// speakerEmbeddings computes one L2-normalized voiceprint per speaker (spk[i] is segs[i]'s speaker) with the voice
+// model: the mean of per-span embeddings over up to voiceprintSec of that speaker's longest clean spans, rounded
+// to 4 decimals to keep the JSON small. Speakers without a span long enough get none; nil (no error) if the
+// voice model is missing.
 func speakerEmbeddings[K comparable](ctx context.Context, cfg Config, wavPath string, segs []Segment, spk []K) (map[K][]float32, error) {
-	if _, err := os.Stat(embModelPath(cfg)); err != nil {
-		warnNoModels()
+	if _, err := os.Stat(voiceModelPath(cfg)); err != nil {
+		slog.Warn("voice model missing, no speaker embeddings; run `tally models`")
 		return nil, nil
 	}
-	ex := sherpa.NewSpeakerEmbeddingExtractor(&sherpa.SpeakerEmbeddingExtractorConfig{Model: embModelPath(cfg), NumThreads: 4})
+	ex := sherpa.NewSpeakerEmbeddingExtractor(&sherpa.SpeakerEmbeddingExtractorConfig{Model: voiceModelPath(cfg), NumThreads: onnxThreads})
 	if ex == nil {
 		return nil, errors.New("sherpa-onnx: cannot create embedding extractor")
 	}
@@ -413,7 +533,11 @@ func speakerEmbeddings[K comparable](ctx context.Context, cfg Config, wavPath st
 			}
 		}
 		if len(embs) > 0 {
-			out[k] = meanNormalized(embs)
+			m := meanNormalized(embs)
+			for i, v := range m {
+				m[i] = float32(math.Round(float64(v)*1e4) / 1e4)
+			}
+			out[k] = m
 		}
 	}
 	return out, nil

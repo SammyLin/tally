@@ -95,3 +95,21 @@ func TestMeanNormalized(t *testing.T) {
 		t.Fatalf("got %v", got)
 	}
 }
+
+func TestMergeTurns(t *testing.T) {
+	a, b := []float32{1, 0.1, 0}, []float32{0, 0.1, 1}
+	turns := []Turn{
+		{0, 20, 7},      // A, chunk 0
+		{20, 40, 3},     // B
+		{40, 50, 9},     // A again under another label: merged (cosine > 0.5)
+		{50, 60, 1<<16}, // B in chunk 1, 10 s
+		{60, 65, 5},     // short (<30 s) cluster nearer B than A, but below mergeSim: folded into B
+		{65, 65.5, 8},   // no embedding: dropped
+	}
+	embs := [][]float32{a, b, {0.9, 0.2, 0.1}, b, {0, 1, 0.3}, nil} // last: cosine 0.38 to B, 0.09 to A
+	got := mergeTurns(turns, embs)
+	want := []Turn{{0, 20, 0}, {20, 40, 1}, {40, 50, 0}, {50, 60, 1}, {60, 65, 1}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+}

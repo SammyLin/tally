@@ -15,11 +15,16 @@ const getRecording = (env: Env, rid: number) => first(env.DB.prepare(`SELECT * F
 async function detail(env: Env, rid: number) {
   const recording = await getRecording(env, rid);
   const [speakers, segments, summaries] = await env.DB.batch([
-    env.DB.prepare(`SELECT id, label, display_name, person_id, auto, embedding IS NOT NULL AS has_embedding FROM speakers WHERE recording_id=? ORDER BY id`).bind(rid),
+    env.DB.prepare(`SELECT s.id, s.label, s.display_name, s.person_id, s.auto, s.embedding IS NOT NULL AS has_embedding, s.emb_model,
+        CASE WHEN p.id IS NOT NULL THEN json_object('person_id', p.id, 'name', p.name, 'score', s.suggest_score) END AS suggest
+      FROM speakers s LEFT JOIN people p ON p.id=s.suggest_person_id WHERE s.recording_id=? ORDER BY s.id`).bind(rid),
     env.DB.prepare(`SELECT id, start_ms, end_ms, speaker_id, text_raw, text_clean FROM segments WHERE recording_id=? ORDER BY start_ms, id`).bind(rid),
     env.DB.prepare(`SELECT * FROM summaries WHERE recording_id=? ORDER BY id DESC`).bind(rid),
   ]);
-  return { recording, speakers: speakers.results, segments: segments.results, summaries: summaries.results };
+  return {
+    recording, segments: segments.results, summaries: summaries.results,
+    speakers: (speakers.results as { suggest: string | null }[]).map((s) => ({ ...s, suggest: s.suggest ? JSON.parse(s.suggest) : null })),
+  };
 }
 
 async function folderExists(env: Env, fid: unknown) {
@@ -146,7 +151,8 @@ const routes: [string, RegExp, Handler][] = [
             db.prepare(`UPDATE speakers SET person_id=(SELECT id FROM people WHERE name=?2), auto=0 WHERE recording_id=?1 AND display_name=?2`).bind(seg.recording_id, name)] : []),
         ];
     await env.DB.batch(stmts);
-    await rematch(env, seg.recording_id); // a new confirmed name may unseat an auto label here
+    // a new voiceprint can re-score every recording; otherwise only this one changed
+    await rematch(env, person && (body.scope || "all") === "all" ? undefined : seg.recording_id);
     return detail(env, seg.recording_id);
   }],
 

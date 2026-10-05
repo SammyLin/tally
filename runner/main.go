@@ -38,11 +38,13 @@ func main() {
 	case cmd == "ingest" && len(args) == 1:
 		err = ingest(ctx, newClient(cfg), args[0])
 	case cmd == "voiceprints" && len(args) == 0:
-		err = backfillVoiceprints(ctx, cfg)
+		err = backfillVoiceprints(ctx, cfg, false)
+	case cmd == "voiceprints" && len(args) == 1 && args[0] == "--recompute":
+		err = backfillVoiceprints(ctx, cfg, true)
 	case cmd == "models" && len(args) == 0:
 		err = downloadModels(ctx, cfg)
 	default:
-		err = errors.New("usage: tally [run] | tally ingest <folder> | tally voiceprints | tally models")
+		err = errors.New("usage: tally [run] | tally ingest <folder> | tally voiceprints [--recompute] | tally models")
 	}
 	if err != nil {
 		fatal(err)

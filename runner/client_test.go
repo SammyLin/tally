@@ -185,7 +185,7 @@ func TestPublish(t *testing.T) {
 		}
 		spk, _ := json.Marshal(tb["speakers"])
 		seg, _ := json.Marshal(tb["segments"].([]any)[1])
-		if string(spk) != `[{"display_name":"Speaker 1","embedding":[0.6,0.8],"label":"SPEAKER_02"},{"display_name":"Speaker 2","label":"SPEAKER_00"}]` ||
+		if string(spk) != `[{"display_name":"Speaker 1","emb_model":"eres2net-large-zh-cn","embedding":[0.6,0.8],"label":"SPEAKER_02"},{"display_name":"Speaker 2","label":"SPEAKER_00"}]` ||
 			string(seg) != `{"end_ms":3000,"speaker":1,"start_ms":1500,"text_raw":"好的"}` {
 			t.Fatalf("speakers %s segment %s", spk, seg)
 		}

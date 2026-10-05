@@ -172,6 +172,21 @@ details.menu{position:relative}
 details.menu summary{list-style:none;cursor:pointer;border-radius:999px;width:38px;height:38px;display:grid;place-items:center;border:1px solid var(--line);background:var(--panel)}
 details.menu summary:hover{background:var(--sunk)}
 details.menu summary::-webkit-details-marker{display:none}
+/* copy as prompt: split button + options panel */
+.cap{display:flex;align-items:center;flex:none}
+.cap>button{display:flex;align-items:center;gap:6px;height:38px;border-radius:999px 0 0 999px;border-right:0;padding:0 .9em;white-space:nowrap}
+.cap details.menu summary{border-radius:0 999px 999px 0;width:34px}
+.cap-opts{min-width:270px!important;padding:12px!important;gap:8px}
+.cap-opts label{display:flex;gap:8px;align-items:center;font-size:.9rem}
+.cap-opts select,.cap-opts textarea{width:100%}
+.cap-opts textarea{min-height:64px;font:inherit;font-size:.85rem;border:1px solid var(--line);border-radius:8px;padding:.4em .6em;background:var(--panel);color:var(--ink)}
+.cap-opts .row{display:flex;gap:6px;flex-wrap:wrap}
+.cap-opts .row button{border:1px solid var(--line)!important}
+.cap-est{font-size:.78rem;color:var(--mute)}
+.cap-est.warn{color:var(--warn)}
+.cap-float{position:absolute;z-index:40;display:flex;align-items:center;gap:6px;white-space:nowrap;padding:.5em .9em;border-radius:999px;box-shadow:var(--shadow);font-size:.85rem}
+#capDlg{width:min(760px,calc(100vw - 32px))}
+#capDlg textarea{width:100%;height:min(60vh,520px);font:13px/1.55 var(--mono,ui-monospace,monospace);border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--sunk);color:var(--ink);resize:vertical}
 details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:5px;display:grid;min-width:180px;z-index:5;animation:pop .14s var(--ease)}
 .notice{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:12px 16px;margin:0 0 18px;font-size:.9rem}
 .notice::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--faint);margin-top:.55em;flex:none}
@@ -309,6 +324,7 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
 @media (pointer:coarse),(max-width:1099px){
   button,select,input[type=search],input[type=text]{min-height:44px}
   details.menu summary{width:44px;height:44px}
+  .cap>button{height:44px}.cap .cap-label{display:none}
   .seg-tools button,.frow .tog,.frow .more,.tree-h button{min-width:44px}
   .seg .ts,.spk{min-height:44px}
   .nv,.pk{min-height:44px}
@@ -407,6 +423,17 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
   <ul id="runnersList"></ul>
   <p class="muted" style="font-size:.8rem">Runner 是在 Mac 上處理轉文字、分辨說話者與摘要的程式。沒有 runner 在線時，新的錄音會排隊，等 runner 上線後自動處理。</p>
   <div class="row" style="margin-top:12px"><button type="button" onclick="this.closest('dialog').close()">關閉</button></div>
+</dialog>
+
+<dialog id="capDlg" aria-labelledby="capTitle">
+  <h2 id="capTitle">預覽 Prompt</h2>
+  <p class="cap-est" id="capDlgEst"></p>
+  <textarea id="capText" readonly aria-label="Prompt 內容"></textarea>
+  <div class="row" style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
+    <button type="button" onclick="this.closest('dialog').close()">關閉</button>
+    <button type="button" id="capDlgDl">下載 .md</button>
+    <button type="button" class="primary" id="capDlgCopy">複製</button>
+  </div>
 </dialog>
 
 <dialog id="pick" aria-labelledby="pickTitle">
@@ -1003,7 +1030,7 @@ function renderDetail(){
 
   const kids=[
     h('p',{class:'eyebrow',id:'deyebrow'}),
-    h('div',{class:'d-head'},titleH,menu),
+    h('div',{class:'d-head'},titleH,r.deleted_at?null:capButton(),menu),
     h('div',{class:'d-sub',id:'dsub'})
   ];
   if(r.deleted_at)kids.push(h('div',{class:'notice',text:'這筆錄音在垃圾桶中。'}));
@@ -1152,7 +1179,114 @@ function editSeg(s,txt){
   txt.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();finish(true)}else if(e.key==='Escape'){e.preventDefault();finish(false)}};
   txt.onblur=()=>finish(true);
 }
-async function copy(text){try{await navigator.clipboard.writeText(text);toast('已複製')}catch(e){fail(e)}}
+async function copy(text,msg='已複製'){try{await navigator.clipboard.writeText(text);toast(msg)}catch(e){fail(e)}}
+
+/* ---------- copy as prompt ---------- */
+// Markdown an LLM reads well: intro, metadata, summaries, transcript with one line per speaker turn.
+const CAP_INTROS={
+  none:{label:'無',text:''},
+  qa:{label:'請根據內容回答問題',text:'以下是一份錄音的摘要與逐字稿，請根據內容回答我接下來的問題。'},
+  todo:{label:'請整理待辦與決議',text:'以下是一份會議錄音的逐字稿，請整理出所有待辦事項（負責人、內容、期限）與會議中做出的決定。'},
+  custom:{label:'自訂…',text:''},
+};
+const CAP_DEF={summary:true,transcript:true,ts:true,raw:false,intro:'qa',custom:''};
+function capOpts(){let o={};try{o=JSON.parse(ls('cap')||'{}')}catch{}return {...CAP_DEF,...o}}
+function saveCapOpts(o){try{localStorage.setItem('tally.cap',JSON.stringify(o))}catch{}}
+const joinTxt=(a,b)=>!a?b:/[A-Za-z0-9]$/.test(a)&&/^[A-Za-z0-9]/.test(b)?a+' '+b:a+b;
+
+// range: [i,j] segment indexes for a selection; summaries are left out then.
+function buildPrompt(o,range){
+  const {recording:r,speakers,segments,summaries}=S.d;
+  const names=Object.fromEntries(speakers.map(s=>[s.id,s.display_name]));
+  const who=id=>id!=null?(names[id]||'未知講者'):'未知講者';
+  const segs=range?segments.slice(range[0],range[1]+1):segments;
+  const talk=new Map();for(const s of segs)talk.set(s.speaker_id,(talk.get(s.speaker_id)||0)+s.end_ms-s.start_ms);
+  const out=[];
+  const intro=o.intro==='custom'?o.custom.trim():CAP_INTROS[o.intro]?.text;
+  if(intro)out.push(intro,'');
+  out.push('# '+r.title);
+  out.push('- 日期：'+fmtDate(r.created_at));
+  if(r.duration_s!=null)out.push('- 長度：'+fmtDur(r.duration_s));
+  if(range&&segs.length)out.push(`- 片段：${fmtDur(segs[0].start_ms/1000)}–${fmtDur(segs.at(-1).end_ms/1000)}`);
+  if(talk.size)out.push('- 參與者：'+[...talk].sort((a,b)=>b[1]-a[1]).map(([id])=>who(id)).join('、'));
+  out.push('- 來源：'+location.origin+'/#/rec/'+r.id);
+  if(o.summary&&!range){
+    const tname=id=>META?.templates.find(t=>t.id===id)?.name||id;
+    for(const sm of summaries.filter(x=>x.status==='done'&&x.content_md))
+      out.push('',`## 摘要（${tname(sm.template_id)}）`,'',sm.content_md.trim().replace(/^(#{1,5}) /gm,'#$1 ')); // nest its headings under ours
+  }
+  if(o.transcript||range){
+    out.push('','## 逐字稿','');
+    let cur=null;
+    for(const s of segs){
+      const t=(o.raw?s.text_raw:(s.text_clean??s.text_raw)).trim();if(!t)continue;
+      if(cur&&cur.id===s.speaker_id){cur.text=joinTxt(cur.text,t);continue}
+      if(cur)out.push(cur.line());
+      cur={id:s.speaker_id,text:t,ms:s.start_ms,line(){return (o.ts?`[${fmtDur(this.ms/1000)}] `:'')+who(this.id)+'：'+this.text}};
+    }
+    if(cur)out.push(cur.line());
+  }
+  return out.join('\n')+'\n';
+}
+// rough: CJK ≈ 1 token per char, other text ≈ 4 chars per token
+function capEstimate(text){
+  const cjk=(text.match(/[\u3000-\u9fff\uff00-\uffef]/g)||[]).length;
+  const tokens=Math.round(cjk+(text.length-cjk)/4);
+  return {chars:text.length,tokens,warn:text.length>150000};
+}
+const capEstText=e=>`約 ${e.chars.toLocaleString()} 字 · ~${e.tokens.toLocaleString()} tokens`+(e.warn?'　內容很長，有些模型一次放不下，可只複製摘要或一段':'');
+function capDownload(text){
+  const a=h('a',{href:URL.createObjectURL(new Blob([text],{type:'text/markdown;charset=utf-8'})),download:(S.d.recording.title||'recording').replace(/[\\/:*?"<>|]/g,'_')+'.md'});
+  document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+}
+const capMeta=async()=>{if(!META)META=await api('/api/templates').catch(()=>null)};
+async function capCopy(o,range){await capMeta();const t=buildPrompt(o,range);await copy(t,`已複製為 Prompt（${capEstText(capEstimate(t)).split('　')[0]}）`)}
+async function capPreview(o,range){
+  await capMeta();const t=buildPrompt(o,range),e=capEstimate(t);
+  $('#capText').value=t;$('#capDlgEst').textContent=capEstText(e);$('#capDlgEst').classList.toggle('warn',e.warn);
+  $('#capDlgCopy').onclick=()=>copy(t,'已複製為 Prompt');$('#capDlgDl').onclick=()=>capDownload(t);
+  $('#capDlg').showModal();
+}
+function capButton(){
+  const o=capOpts();
+  const est=h('p',{class:'cap-est'});
+  const refresh=()=>{saveCapOpts(o);const e=capEstimate(buildPrompt(o));est.textContent=capEstText(e);est.classList.toggle('warn',e.warn)};
+  const chk=(k,label)=>h('label',{},h('input',{type:'checkbox',checked:o[k],onchange:e=>{o[k]=e.target.checked;refresh()}}),label);
+  const custom=h('textarea',{placeholder:'例如：請用三點整理重點，並列出我需要追蹤的事。','aria-label':'自訂指示語',oninput:e=>{o.custom=e.target.value;refresh()}});
+  custom.value=o.custom;custom.hidden=o.intro!=='custom';
+  const intro=h('select',{'aria-label':'開頭指示語',onchange:e=>{o.intro=e.target.value;custom.hidden=o.intro!=='custom';refresh()}},
+    Object.entries(CAP_INTROS).map(([k,v])=>h('option',{value:k,selected:o.intro===k,text:v.label})));
+  const close=e=>e.target.closest('details').open=false;
+  const opts=h('details',{class:'menu',ontoggle:e=>{if(e.target.open)refresh()}},
+    h('summary',{'aria-label':'複製選項',title:'複製選項'},icon('down')),
+    h('div',{class:'cap-opts'},
+      chk('summary','包含摘要'),chk('transcript','包含逐字稿'),chk('ts','時間戳'),chk('raw','使用原始辨識文字（未整理）'),
+      h('label',{style:'display:grid;gap:4px'},'開頭指示語',intro),custom,est,
+      h('div',{class:'row'},
+        h('button',{type:'button',text:'預覽',onclick:e=>{close(e);capPreview(o)}}),
+        h('button',{type:'button',text:'下載 .md',onclick:e=>{close(e);capDownload(buildPrompt(o))}}))));
+  return h('div',{class:'cap'},
+    h('button',{type:'button',title:'複製為可貼到 ChatGPT / Claude 的 Prompt',onclick:()=>capCopy(capOpts()).catch(fail)},icon('copy'),h('span',{class:'cap-label',text:'複製為 Prompt'})),
+    opts);
+}
+// selecting text in the transcript offers "copy this part as prompt" (whole segments, with speakers and times)
+const capFloat=h('button',{type:'button',class:'cap-float primary',hidden:true},icon('copy'),'複製這段為 Prompt');
+document.body.append(capFloat);
+function selRange(){
+  const sel=getSelection();if(!sel||sel.isCollapsed||!S.d)return null;
+  const a=sel.anchorNode?.parentElement?.closest('.seg'),b=sel.focusNode?.parentElement?.closest('.seg');
+  if(!a||!b||!a.closest('.segs'))return null;
+  const i=+a.dataset.i,j=+b.dataset.i;return [Math.min(i,j),Math.max(i,j)];
+}
+document.addEventListener('selectionchange',()=>{
+  const rg=selRange();if(!rg){capFloat.hidden=true;return}
+  const rect=getSelection().getRangeAt(0).getBoundingClientRect();
+  capFloat.hidden=false;
+  capFloat.style.left=Math.max(8,Math.min(rect.left,innerWidth-capFloat.offsetWidth-8))+scrollX+'px';
+  capFloat.style.top=(rect.bottom+scrollY+8)+'px';
+});
+capFloat.addEventListener('pointerdown',e=>e.preventDefault()); // keep the selection
+capFloat.onclick=()=>{const rg=selRange();if(rg)capCopy(capOpts(),rg).catch(fail);getSelection().removeAllRanges();capFloat.hidden=true};
 
 /* ---------- speaker popover ---------- */
 const dlg=$('#spk');

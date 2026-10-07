@@ -1205,7 +1205,7 @@ function getPlayer(r){
   const speed=h('select',{'aria-label':'播放速度'},[0.75,1,1.25,1.5,1.75,2].map(v=>h('option',{value:String(v),selected:v===1,text:v+'×'})));
   const skip=n=>{audio.currentTime=Math.max(0,Math.min((audio.duration||1e9),audio.currentTime+n))};
   let dragging=false;
-  playBtn.onclick=()=>audio.paused?audio.play().catch(fail):audio.pause();
+  playBtn.onclick=()=>audio.paused?audio.play().catch(()=>toast('音檔暫時無法播放，請稍後再試',4000)):audio.pause();
   const setPlayIcon=()=>{const p=!audio.paused;playBtn.replaceChildren(icon(p?'pause':'play'));playBtn.setAttribute('aria-label',p?'暫停':'播放')};
   audio.addEventListener('play',setPlayIcon);audio.addEventListener('pause',setPlayIcon);
   audio.addEventListener('loadedmetadata',()=>{seek.max=String(dur());upd();if(S.d?.recording.id===r.id)setTrack(S.d.segments)});
@@ -1230,7 +1230,7 @@ function getPlayer(r){
 /* ---------- transcript ---------- */
 function renderTranscript(pane){
   const {recording:r,segments,speakers}=S.d;
-  const hasAudio=r.duration_s!=null&&r.status!=='queued'&&r.status!=='converting'||(S.playerFor===r.id);
+  const hasAudio=!!r.play_key; // play.m4a is uploaded mid-pipeline; until then no player at all
   if(hasAudio){const p=getPlayer(r);pane.append(p.el);p.setTrack(segments)}
   if(!segments.length){pane.append(h('p',{class:'muted',text:BUSY(r.status)?'逐字稿產生中…':'沒有逐字稿內容。'}));S.segEls=[];S.starts=[];return}
   const names=Object.fromEntries(speakers.map(s=>[s.id,s.display_name]));

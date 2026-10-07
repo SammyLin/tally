@@ -167,7 +167,7 @@ func tail(b []byte) string {
 	return string(b[max(0, len(b)-1000):])
 }
 
-// publish uploads the transcript, cleans it up and titles it via ACP, uploads play.m4a and marks the job done.
+// publish uploads the transcript and play.m4a, cleans it up and titles it via ACP, and marks the job done.
 func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []Segment, spk []int, embs map[int][]float32, play string) error {
 	type speaker struct {
 		Label       string    `json:"label"`
@@ -206,6 +206,10 @@ func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []
 	if len(res.SegmentIDs) != len(segs) {
 		return fmt.Errorf("transcript: got %d segment ids for %d segments", len(res.SegmentIDs), len(segs))
 	}
+	// audio right after the transcript, so it can be played while cleanup and title still run
+	if err := uploadPlay(ctx, t, play); err != nil {
+		return fmt.Errorf("upload play.m4a: %w", err)
+	}
 
 	rows := make([]segRow, len(segs))
 	for i, s := range segs {
@@ -234,9 +238,6 @@ func publish(ctx context.Context, cfg Config, t *task, duration float64, segs []
 		}
 	}
 
-	if err := uploadPlay(ctx, t, play); err != nil {
-		return fmt.Errorf("upload play.m4a: %w", err)
-	}
 	return t.post(ctx, "done", map[string]any{}, nil)
 }
 

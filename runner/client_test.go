@@ -202,9 +202,9 @@ func TestPublish(t *testing.T) {
 				t.Fatalf("complete parts: %s", b)
 			}
 		}
+		// play.m4a goes up right after the transcript, before cleanup, so it can be played meanwhile
 		calls := f.seen()
-		i := slices.Index(calls, want[0])
-		if i < 0 || !slices.Equal(calls[i:], append(want, "POST /api/runner/recordings/5/done")) {
+		if !slices.Equal(calls[:1+len(want)], append([]string{"POST /api/runner/recordings/5/transcript"}, want...)) || calls[len(calls)-1] != "POST /api/runner/recordings/5/done" {
 			t.Fatalf("multipart=%v calls: %v", multipart, calls)
 		}
 	}

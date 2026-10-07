@@ -4,11 +4,13 @@ import { getSettings } from "./settings";
 import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
 const LEASE = `datetime('now','+10 minutes')`;
-const ACTIVE = { recordings: `status IN ('converting','transcribing','cleaning')`, summaries: `status='running'` };
+const ACTIVE = { recordings: `status IN ('converting','transcribing','cleaning')`, summaries: `status='running'`, asks: `status='running'` };
 const CHUNK_CHARS = 300_000; // JSON chars per bound parameter; D1 caps a value at 2 MB (CJK = 3 bytes/char)
+// ponytail: dates handed to the Ask LLM are Taiwan local; add a timezone setting if the user ever moves
+const TZ = `'+8 hours'`;
 
 type Kind = keyof typeof ACTIVE;
-const kindOf = (s: string): Kind => (s.startsWith("rec") ? "recordings" : "summaries");
+const kindOf = (s: string): Kind => (s.startsWith("rec") ? "recordings" : s.startsWith("ask") ? "asks" : "summaries");
 const id = (s: string) => Number(s);
 
 // Records that a runner is alive; stt and build version are only known on claim.
@@ -38,14 +40,17 @@ export async function listRunners(env: Env) {
           WHERE runner=r.name AND ${ACTIVE.recordings} AND lease_until > datetime('now') LIMIT 1),
         (SELECT json_object('kind','summary','id',s.id,'recording_id',s.recording_id,'status',s.status,'title',rc.title)
           FROM summaries s JOIN recordings rc ON rc.id=s.recording_id
-          WHERE s.runner=r.name AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1)) AS job
+          WHERE s.runner=r.name AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1),
+        (SELECT json_object('kind','ask','id',id,'status',status,'title',question) FROM asks
+          WHERE runner=r.name AND ${ACTIVE.asks} AND lease_until > datetime('now') LIMIT 1)) AS job
     FROM runners r ORDER BY r.last_seen DESC`).all<{ name: string; last_seen: string; stt: string | null; version: string | null; version_time: string | null; ago_s: number; job: string | null }>();
   const q = await env.DB.prepare(`SELECT
       (SELECT count(*) FROM recordings WHERE status='queued' AND deleted_at IS NULL) AS recordings,
-      (SELECT count(*) FROM summaries WHERE status='queued') AS summaries`).first<{ recordings: number; summaries: number }>();
+      (SELECT count(*) FROM summaries WHERE status='queued') AS summaries,
+      (SELECT count(*) FROM asks WHERE status='queued') AS asks`).first<{ recordings: number; summaries: number; asks: number }>();
   return {
     runners: results.map((r) => ({ ...r, online: r.ago_s < 180, job: r.job ? JSON.parse(r.job) : null })),
-    queued: q ?? { recordings: 0, summaries: 0 },
+    queued: q ?? { recordings: 0, summaries: 0, asks: 0 },
   };
 }
 
@@ -72,6 +77,17 @@ async function transcriptText(env: Env, rid: number) {
   return results.map((r) => `[${pad(Math.floor(r.ms / 60000))}:${pad(Math.floor(r.ms / 1000) % 60)}] ${r.name}: ${r.text}`).join("\n");
 }
 
+// Ask step 1: one compact line per done recording; speakers = names that have segments, summary = start of the newest one.
+async function askIndex(env: Env) {
+  const { results } = await env.DB.prepare(`SELECT r.id, r.title, date(r.created_at, ${TZ}) AS date, r.duration_s,
+      (SELECT json_group_array(DISTINCT display_name) FROM speakers
+        WHERE recording_id=r.id AND id IN (SELECT speaker_id FROM segments WHERE recording_id=r.id)) AS speakers,
+      (SELECT substr(content_md, 1, 300) FROM summaries WHERE recording_id=r.id AND status='done' ORDER BY id DESC LIMIT 1) AS summary
+    FROM recordings r WHERE r.deleted_at IS NULL AND r.status='done' ORDER BY r.created_at DESC, r.id DESC`)
+    .all<{ speakers: string }>();
+  return results.map((r) => ({ ...r, speakers: JSON.parse(r.speakers) }));
+}
+
 async function recording(env: Env, rid: number) {
   return first<{ filename: string; source_key: string | null; play_key: string | null; upload_id: string | null }>(
     env.DB.prepare(`SELECT filename, source_key, play_key, upload_id FROM recordings WHERE id=?`).bind(rid));
@@ -79,9 +95,17 @@ async function recording(env: Env, rid: number) {
 
 export const runnerRoutes: [string, RegExp, Handler][] = [
   ["POST", /^\/api\/runner\/claim$/, async (req, env) => {
-    const body = await readJSON<{ runner?: unknown; stt?: unknown; version?: unknown; version_time?: unknown; skip_recordings?: unknown }>(req);
+    const body = await readJSON<{ runner?: unknown; stt?: unknown; version?: unknown; version_time?: unknown; skip_recordings?: unknown; asks?: unknown }>(req);
     const runner = runnerName(body);
     await seen(env, runner, body).run();
+    // asks first (interactive, short); only runners that declare `asks: true` know the job kind
+    const ask = body.asks !== true ? null : await env.DB.prepare(`UPDATE asks SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
+      WHERE id=(SELECT id FROM asks WHERE status='queued' OR (${ACTIVE.asks} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
+      RETURNING id, question`).bind(runner).first<{ id: number; question: string }>();
+    if (ask) {
+      const { today } = (await env.DB.prepare(`SELECT date('now', ${TZ}) AS today`).first<{ today: string }>())!;
+      return { job: { kind: "ask", ...ask, today, index: await askIndex(env) } };
+    }
     // a runner works one job at a time, so a job still leased to this runner is left over from its previous run
     // one UPDATE…RETURNING per table: D1 runs statements serially, so two runners can never get the same row
     // skip_recordings: the runner's STT is paused (Groq quota), so it only takes summaries for now
@@ -109,7 +133,7 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       settings: { about, content_focus, instructions, me: meName, vocab } } };
   }],
 
-  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/heartbeat$/, async (req, env, [k, jid]) => {
+  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?)\/(\d+)\/heartbeat$/, async (req, env, [k, jid]) => {
     const body = await readJSON<{ runner?: unknown; status?: unknown }>(req);
     const kind = kindOf(k);
     let status: string | null = null;
@@ -257,15 +281,16 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
-  // Puts a claimed summary straight back in the queue (runner shutting down).
-  ["POST", /^\/api\/runner\/summar(?:y|ies)\/(\d+)\/defer$/, async (req, env, [sid]) => {
-    const r = await env.DB.prepare(`UPDATE summaries SET status='queued', runner=NULL, lease_until=NULL
-      WHERE id=?1 AND runner=?2 AND ${ACTIVE.summaries}`).bind(id(sid), runnerName(await readJSON(req))).run();
+  // Puts a claimed summary or ask straight back in the queue (runner shutting down).
+  ["POST", /^\/api\/runner\/(summar(?:y|ies)|asks?)\/(\d+)\/defer$/, async (req, env, [k, jid]) => {
+    const kind = kindOf(k);
+    const r = await env.DB.prepare(`UPDATE ${kind} SET status='queued', runner=NULL, lease_until=NULL
+      WHERE id=?1 AND runner=?2 AND ${ACTIVE[kind]}`).bind(id(jid), runnerName(await readJSON(req))).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
     return { ok: true };
   }],
 
-  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/fail$/, async (req, env, [k, jid]) => {
+  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?)\/(\d+)\/fail$/, async (req, env, [k, jid]) => {
     const kind = kindOf(k);
     const body = await readJSON<{ runner?: unknown; error?: unknown }>(req);
     const r = await env.DB.prepare(`UPDATE ${kind} SET status='error', error=?3, lease_until=NULL WHERE id=?1 AND runner=?2 AND ${ACTIVE[kind]}`)
@@ -279,6 +304,30 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     if (typeof body.content_md !== "string") throw new HttpError(400, "content_md required");
     const r = await env.DB.prepare(`UPDATE summaries SET status='done', content_md=?3, error=NULL, lease_until=NULL
       WHERE id=?1 AND runner=?2 AND ${ACTIVE.summaries}`).bind(id(sid), runnerName(body), body.content_md).run();
+    if (!r.meta.changes) throw new HttpError(409, "lease lost");
+    return { ok: true };
+  }],
+
+  // Ask step 2 input, in the order asked; the runner name rides in ?runner= (GET has no body).
+  ["GET", /^\/api\/runner\/asks?\/(\d+)\/transcripts$/, async (_req, env, [aid], url) => {
+    const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean).map(Number);
+    if (!ids.length || ids.length > 20 || !ids.every(Number.isInteger)) throw new HttpError(400, "ids: 1-20 comma-separated recording ids");
+    await hold(env, "asks", id(aid), runnerName({ runner: url.searchParams.get("runner") }));
+    const { results } = await env.DB.prepare(`SELECT id, title, date(created_at, ${TZ}) AS date FROM recordings
+      WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL AND status='done'`).bind(JSON.stringify(ids))
+      .all<{ id: number; title: string; date: string }>();
+    const byId = new Map(results.map((r) => [r.id, r]));
+    const rows = ids.flatMap((i) => byId.get(i) ?? []);
+    return Promise.all(rows.map(async (r) => ({ ...r, transcript: await transcriptText(env, r.id) })));
+  }],
+
+  ["POST", /^\/api\/runner\/asks?\/(\d+)\/result$/, async (req, env, [aid]) => {
+    const body = await readJSON<{ runner?: unknown; answer_md?: unknown; sources?: unknown }>(req);
+    if (typeof body.answer_md !== "string") throw new HttpError(400, "answer_md required");
+    const sources = body.sources ?? [];
+    if (!Array.isArray(sources) || !sources.every(Number.isInteger)) throw new HttpError(400, "sources: [recording ids] required");
+    const r = await env.DB.prepare(`UPDATE asks SET status='done', answer_md=?3, sources=?4, error=NULL, lease_until=NULL
+      WHERE id=?1 AND runner=?2 AND ${ACTIVE.asks}`).bind(id(aid), runnerName(body), body.answer_md, JSON.stringify(sources)).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
     return { ok: true };
   }],

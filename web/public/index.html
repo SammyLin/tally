@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+TC:wght@700&display=swap">
-<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous" defer onload="window.renderSummaries&&renderSummaries()"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous" defer onload="window.renderSummaries&&renderSummaries();window.renderAskBody&&renderAskBody()"></script>
 <style>
 [hidden]{display:none!important} /* a class's display (flex/grid) must never un-hide an element */
 /* 錄音室手記 — warm paper, ink, one signal red (the REC tally). Serif for titles, mono for timecodes. */
@@ -276,6 +276,22 @@ details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(-
 .md code{font-family:var(--mono);font-size:.88em;background:var(--sunk);padding:0 4px;border-radius:4px}
 .md a{color:var(--ink);text-decoration-color:var(--sig);text-underline-offset:3px}
 .md blockquote{margin:.8em 0;padding-left:14px;border-left:2px solid var(--line);color:var(--mute)}
+
+/* ---- ask ---- */
+.ask-form{display:grid;gap:10px;margin:0 0 18px}
+.ask-form textarea{width:100%;min-height:4.4em;resize:vertical;font-size:1rem;line-height:1.6;border:1px solid var(--line);border-radius:var(--r);padding:.7em .9em;background:var(--panel);color:var(--ink)}
+.ask-form textarea:focus-visible{outline:0;border-color:var(--sig);box-shadow:0 0 0 3px var(--sig-soft)}
+.ask-form .row{align-items:center;flex-wrap:wrap}
+.ask-ex{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.85rem;color:var(--mute)}
+.ask-ex button{font-size:.85rem;padding:.2em .8em}
+.ask-q{flex:1;min-width:0;margin:0;font-family:var(--serif);font-size:1.12rem;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.ask-src{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--line2);font-size:.8rem;color:var(--faint)}
+.item .p{font-size:.8rem;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cite{display:inline-flex;align-items:baseline;gap:5px;max-width:100%;vertical-align:baseline;font-size:.78rem;line-height:1.6;padding:0 8px;margin:0 2px;border-radius:99px;background:var(--sig-soft);color:var(--ink2);text-decoration:none!important;white-space:nowrap}
+.cite:hover{background:var(--sel)}
+.cite .ct{overflow:hidden;text-overflow:ellipsis;max-width:16em;min-width:0}
+.cite .mono{color:var(--sig)}
+@media (min-width:1100px){.ask-recent{display:none}} /* the library pane lists them there */
 
 /* ---- dialogs, toasts, drop ---- */
 dialog{border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--ink);padding:22px;width:min(400px,calc(100vw - 32px));box-shadow:var(--shadow)}
@@ -578,7 +594,8 @@ const ICONS = {
   menu:'<path d="M4 7h16M4 12h16M4 17h16"/>', clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
   list:'<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>', search:'<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
   cal:'<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', file:'<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/>', inbox:'<path d="M4 13l2-8h12l2 8v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/>',
-  gear:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>'
+  gear:'<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  ask:'<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/>'
 };
 function icon(n){const s=document.createElementNS('http://www.w3.org/2000/svg','svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','icon');s.setAttribute('aria-hidden','true');s.innerHTML=ICONS[n];return s}
 
@@ -658,13 +675,14 @@ function runnerRow(r,latest){
   const what=!r.online?'離線 · 最後連線 '+ago(r.ago_s)
     :!j?'閒置，等待工作'
     :j.kind==='recording'?`處理中：#${j.id}「${j.title}」· ${STATUS[j.status]||j.status}`
+    :j.kind==='ask'?`回答提問：「${j.title}」`
     :`產生摘要：#${j.recording_id}「${j.title}」`;
   return h('li',{class:'rrow'},h('span',{class:'rdot'+(r.online?' on':''),'aria-hidden':'true'}),
     h('div',{},h('b',{text:r.name}),r.stt?h('span',{class:'badge',text:r.stt==='groq'?'Groq':'本機 Whisper'}):null,versionBadge(r,latest),h('div',{class:'muted',text:what})));
 }
 function renderRunners(){
   const d=S.runners;if(!d)return;
-  const on=d.runners.filter(r=>r.online).length,q=d.queued.recordings+d.queued.summaries;
+  const on=d.runners.filter(r=>r.online).length,q=d.queued.recordings+d.queued.summaries+(d.queued.asks||0);
   for(const b of document.querySelectorAll('[data-runners]')){
     b.replaceChildren(...[h('span',{class:'rdot'+(on?' on':''),'aria-hidden':'true'}),
       h('span',{class:'rtxt',text:on?`${on} 台 runner 在線`:'沒有 runner 在線'}),
@@ -672,7 +690,7 @@ function renderRunners(){
     b.classList.toggle('warn',!on&&q>0);
     b.title=on?`${on} 台 runner 在線`:'沒有 runner 在線';
   }
-  $('#runnersQueue').textContent=`排隊中：${d.queued.recordings} 份錄音、${d.queued.summaries} 份摘要`;
+  $('#runnersQueue').textContent=`排隊中：${d.queued.recordings} 份錄音、${d.queued.summaries} 份摘要、${d.queued.asks||0} 個提問`;
   $('#runnersList').replaceChildren(...(d.runners.length?d.runners.map(r=>runnerRow(r,latestBuild(d.runners))):[h('li',{class:'muted',text:'還沒有 runner 連線過。'})]));
 }
 async function loadRunners(){
@@ -701,6 +719,7 @@ function setView(view,folder=null){
 }
 function applyView(view,folder=null){
   S.view=view;S.folder=folder;
+  document.querySelector('.search').hidden=false;
   try{localStorage.setItem('tally.view',JSON.stringify({view,folder}))}catch{}
   if(view==='folder'){for(const f of pathOf(folder).slice(0,-1))expanded.add(f.id);saveExpanded()}
   renderNav();renderCrumbs();loadList();updateTitle();
@@ -728,7 +747,9 @@ function renderNav(){
     if(drop)dropTarget(b,drop);
     return b;
   };
-  const rows=[nv('recent','最近','clock'),nv('all','全部','list'),nv('none','未分類','inbox',{rec:id=>moveRec(id,null)})];
+  const rows=[nv('recent','最近','clock'),nv('all','全部','list'),
+    h('a',{href:'#/ask',class:'nv','aria-current':String(S.view==='ask'),onclick:e=>{e.preventDefault();if(location.hash==='#/ask')route();else location.hash='#/ask'}},icon('ask'),h('span',{class:'nm',text:'問問看'})),
+    nv('none','未分類','inbox',{rec:id=>moveRec(id,null)})];
   const head=h('div',{class:'tree-h'},h('span',{text:'資料夾'}),
     h('button',{type:'button','aria-label':'新增資料夾',title:'新增資料夾',onclick:()=>newFolder(null).catch(fail)},icon('plus')));
   dropTarget(head,{folder:id=>moveFolder(id,null)});
@@ -830,7 +851,7 @@ addEventListener('resize',closeCtx);
 $('#tree').addEventListener('scroll',closeCtx,{passive:true});
 
 /* ---------- library ---------- */
-const VIEWS={recent:'最近',all:'全部',none:'未分類',trash:'垃圾桶'};
+const VIEWS={recent:'最近',all:'全部',none:'未分類',trash:'垃圾桶',ask:'問問看'};
 function renderCrumbs(){
   const c=$('#crumbs');
   if(S.view!=='folder'){c.replaceChildren(h('span',{class:'cur',text:VIEWS[S.view]}));return}
@@ -840,6 +861,7 @@ function renderCrumbs(){
 }
 async function loadList(){
   clearTimeout(listTimer);
+  if(S.view==='ask')return loadAsks();
   const key=listKey();
   try{
     const list=await api('/api/recordings?'+key);
@@ -854,6 +876,7 @@ function listKey(){
   return new URLSearchParams(p).toString();
 }
 function renderList(){
+  if(S.view==='ask')return renderAskList();
   const ul=$('#list');ul.replaceChildren();
   $('#lcount').textContent=S.list.length?`${S.list.length} 筆`:'';
   if(S.listErr&&!S.list.length){ul.append(h('li',{class:'empty'},h('p',{text:'無法載入清單：'+S.listErr.message}),h('button',{type:'button',text:'重試',onclick:loadList})));return}
@@ -1035,6 +1058,9 @@ $('#recDlg').addEventListener('cancel',e=>e.preventDefault()); // Esc must not s
 /* ---------- routing ---------- */
 function go(id,tab){location.hash=id?recHash(id,tab):`#/${vpath(S.view,S.folder)}`}
 function route(){
+  const am=location.hash.match(/^#\/ask(?:\/(\d+))?\/?$/);
+  if(am){openAsk(am[1]?+am[1]:null);return}
+  clearTimeout(askTimer);
   // also accepts the old #/rec/<id> links (view then comes from localStorage)
   const m=location.hash.match(/^#\/(?:(recent|all|unfiled|trash)|folder\/(\d+))?\/?(?:rec\/(\d+)(\/summary)?)?/);
   const v=m?.[1]?{recent:'recent',all:'all',unfiled:'none',trash:'trash'}[m[1]]:m?.[2]?'folder':null, folder=m?.[2]?+m[2]:null;
@@ -1042,6 +1068,7 @@ function route(){
     toast('找不到這個資料夾');history.replaceState(null,'',location.hash.replace(/^#\/folder\/\d+/,'#/all'));return route();
   }
   if(v&&(v!==S.view||folder!==S.folder))applyView(v,folder);
+  else if(S.view==='ask')applyView('recent');
   const id=m?.[3]?+m[3]:null, tab=m?.[4]?'summary':'transcript';
   const want=id?recHash(id,tab):`#/${vpath(S.view,S.folder)}`;
   if(location.hash!==want)history.replaceState(null,'',want);
@@ -1236,6 +1263,12 @@ function renderTranscript(pane){
     S.segEls.push(el);list.append(el);
   });
   pane.append(list);
+  // opened from an Ask citation: start there
+  if(S.seek?.id===r.id){
+    const ms=S.seek.ms;S.seek=null;S.userScrollAt=0;
+    if(hasAudio){S.player.audio.currentTime=ms/1000;S.player.audio.play().catch(()=>{})}
+    S.segEls[Math.max(0,findIdx(ms))]?.scrollIntoView({block:'center'});
+  }
   syncActive();
 }
 function seekTo(s){
@@ -1474,6 +1507,110 @@ function renderSummaries(){
       s.status==='error'?h('p',{class:'notice error',text:s.error||'產生失敗'}):
       s.content_md?renderMd(s.content_md):null);
   }):[h('p',{class:'muted',text:'還沒有摘要。'})]));
+}
+
+/* ---------- ask (問問看): #/ask[/<id>] ---------- */
+const ASK_STATUS={queued:'排隊中',running:'思考中',done:'完成',error:'錯誤'};
+const ASK_EXAMPLES=['志明上個月答應了什麼？','客戶在哪幾場會議提過價格？'];
+let askTimer;
+function openAsk(aid){
+  clearTimeout(detailTimer);clearTimeout(listTimer);
+  if(S.player){S.player.audio.pause();S.player=null;S.playerFor=null}
+  const fresh=S.view!=='ask'||!document.getElementById('askBody');
+  S.view='ask';S.folder=null;S.id=null;S.d=null;
+  if(aid!==S.askId){S.askId=aid;S.ask=null;S.askErr=null}
+  document.querySelector('.search').hidden=true;
+  renderNav();renderCrumbs();updateTitle();renderList();setDrawer(false);
+  if(fresh)renderAskMain();else renderAskBody();
+  loadAsks();
+}
+async function loadAsks(){
+  clearTimeout(askTimer);
+  const aid=S.askId;
+  try{
+    const [list,a]=await Promise.all([api('/api/asks'),aid?api(`/api/asks/${aid}`):null]);
+    if(S.view!=='ask')return;
+    S.asks=list;S.asksErr=null;renderAskList();
+    if(aid===S.askId){const changed=!aid||JSON.stringify(a)!==JSON.stringify(S.ask);S.ask=a;if(changed)renderAskBody()}
+  }catch(e){
+    if(S.view!=='ask')return;
+    if(e.status===404&&aid&&aid===S.askId){S.askErr='找不到這個提問。';renderAskBody()}
+    else{S.asksErr=e;if(!S.asks)renderAskList();console.error(e)}
+  }
+  if(S.view==='ask'&&(S.asks||[]).some(a=>BUSY(a.status)))askTimer=setTimeout(loadAsks,3000);
+}
+const askBadge=a=>a.status==='done'?null:h('span',{class:'badge '+(a.status==='error'?'error':'busy'),text:ASK_STATUS[a.status]||a.status});
+const askItem=a=>h('a',{href:'#/ask/'+a.id,class:'item','aria-current':String(a.id===S.askId)},
+  h('span',{class:'t',text:a.question}),a.preview?h('span',{class:'p',text:a.preview}):null,
+  h('span',{class:'m'},h('span',{text:fmtShort(a.created_at)}),askBadge(a)));
+function renderAskList(){
+  const ul=$('#list');
+  $('#lcount').textContent=S.asks?.length?`${S.asks.length} 筆`:'';
+  if(!S.asks){ul.replaceChildren(h('li',{class:'empty',text:S.asksErr?'無法載入：'+S.asksErr.message:'載入中…'}));return}
+  ul.replaceChildren(...(S.asks.length?S.asks.map(a=>h('li',{},askItem(a))):[h('li',{class:'empty',text:'還沒有提問'})]));
+}
+function renderAskMain(){
+  const ta=h('textarea',{id:'askIn',maxlength:'1000',rows:'3',placeholder:'問所有錄音，例如：'+ASK_EXAMPLES[0],'aria-label':'問題'});
+  const btn=h('button',{type:'submit',class:'primary',text:'送出'});
+  const form=h('form',{class:'ask-form',onsubmit:async e=>{
+    e.preventDefault();const question=ta.value.trim();if(!question)return;
+    btn.disabled=true;
+    try{const r=await api('/api/asks',{method:'POST',body:{question}});ta.value='';location.hash='#/ask/'+r.id}
+    catch(err){fail(err)}finally{btn.disabled=false}
+  }},ta,h('div',{class:'row'},h('span',{class:'hint',style:'margin-right:auto',text:'會先找出相關錄音，再讀逐字稿回答，每句都附出處。'}),btn));
+  ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();form.requestSubmit()}});
+  $('#main').replaceChildren(h('div',{class:'detail'},
+    h('p',{class:'eyebrow'},icon('ask'),'跨錄音提問'),
+    h('h2',{class:'d-title',style:'margin-bottom:16px',text:'問問看'}),
+    form,h('div',{id:'askBody'})));
+  if(!narrow.matches&&!S.askId)ta.focus();
+  renderAskBody();
+}
+function renderAskBody(){
+  const box=document.getElementById('askBody');if(!box)return;
+  if(!S.askId){
+    box.replaceChildren(
+      h('div',{class:'ask-ex'},'試試：',ASK_EXAMPLES.map(q=>h('button',{type:'button',text:q,onclick:()=>{const t=$('#askIn');t.value=q;t.focus()}}))),
+      S.asks?.length?h('ul',{class:'list ask-recent',style:'padding:14px 0 0'},S.asks.map(a=>h('li',{},askItem(a)))):null);
+    return;
+  }
+  const a=S.ask;
+  if(!a){box.replaceChildren(h('p',{class:'muted',text:S.askErr||'載入中…'}));return}
+  const recs=new Map((a.recordings||[]).map(r=>[r.id,r]));
+  const acts=h('span',{class:'acts'},
+    a.answer_md?h('button',{type:'button',class:'ghost','aria-label':'複製回答',title:'複製',onclick:()=>copy(a.answer_md)},icon('copy')):null,
+    h('button',{type:'button',class:'ghost','aria-label':'刪除提問',title:'刪除',onclick:async()=>{
+      if(!confirm('刪除這個提問？'))return;
+      try{await api(`/api/asks/${a.id}`,{method:'DELETE'});S.asks=S.asks?.filter(x=>x.id!==a.id);location.hash='#/ask'}catch(e){fail(e)}}},icon('trash')));
+  const body=a.status==='queued'?h('p',{class:'notice busy',role:'status',text:noRunner()?'排隊中。'+NO_RUNNER:'排隊中…'})
+    :a.status==='running'?h('p',{class:'notice busy',role:'status',text:'思考中：正在找出相關錄音、閱讀逐字稿…'})
+    :a.status==='error'?h('div',{},h('p',{class:'notice error',role:'alert',text:'回答失敗：'+(a.error||'未知錯誤')}),
+      h('button',{type:'button',class:'primary',text:'重試',onclick:async e=>{e.currentTarget.disabled=true;try{await api(`/api/asks/${a.id}/retry`,{method:'POST'});loadAsks()}catch(err){fail(err)}}}))
+    :renderAnswer(a.answer_md||'',recs);
+  const used=a.status==='done'?a.sources.filter(id=>recs.has(id)):[];
+  box.replaceChildren(h('article',{class:'card'},
+    h('div',{class:'card-head'},h('p',{class:'ask-q',text:a.question}),acts),
+    h('p',{class:'hint',style:'margin:0 0 10px',text:fmtDate(a.created_at)}),
+    body,
+    used.length?h('div',{class:'ask-src'},'參考錄音',used.map(id=>citeChip(recs.get(id),id,null))):null));
+}
+// opens the recording (transcript) and, with ms, seeks there once it renders
+function citeChip(rec,id,ms){
+  const label=rec?rec.title:`錄音 #${id}`,t=ms!=null?fmtDur(ms/1000):null;
+  return h('a',{href:`#/all/rec/${id}`,class:'cite',title:(rec?.deleted?'（在垃圾桶）':'')+label+(t?' '+t:''),onclick:()=>{S.seek=ms!=null?{id,ms}:null}},
+    h('span',{class:'ct',text:label}),t?h('span',{class:'mono',text:t}):null);
+}
+// [[id@mm:ss]] / [[id@h:mm:ss]] (several may share one bracket) → chips; private-use chars carry them through markdown
+function renderAnswer(md,recs){
+  const cites=[];
+  const src=md.replace(/\[\[([^\]]+)\]\]/g,(all,inner)=>{
+    const parts=[...inner.matchAll(/(\d+)\s*@\s*(\d+(?::\d{1,2}){1,2})/g)];
+    return parts.length?parts.map(([,id,t])=>{cites.push([+id,t.split(':').reduce((a,x)=>a*60+ +x,0)*1000]);return `${cites.length-1}`}).join(''):all;
+  });
+  const div=renderMd(src),walk=document.createTreeWalker(div,NodeFilter.SHOW_TEXT),nodes=[];
+  while(walk.nextNode())if(walk.currentNode.nodeValue.includes(''))nodes.push(walk.currentNode);
+  for(const n of nodes)n.replaceWith(...n.nodeValue.split(/(\d+)/).map((s,i)=>i%2?citeChip(recs.get(cites[+s][0]),...cites[+s]):s));
+  return div;
 }
 
 /* ---------- settings ---------- */

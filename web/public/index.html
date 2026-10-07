@@ -397,6 +397,9 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
   .detail{padding:28px 32px 96px}
   .player{top:calc(57px + env(safe-area-inset-top))}
   .hero{min-height:calc(100dvh - 57px)}
+  .home{padding:16px 8px 96px}
+  .home-t{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 8px 6px;font-family:var(--serif);font-size:20px}
+  .home .list{overflow:visible;padding:0}
 }
 @media (max-width:767px){
   .topbar .rchip .rtxt{display:none}
@@ -882,8 +885,18 @@ function listKey(){
 }
 function renderList(){
   if(S.view==='ask')return renderAskList();
-  const ul=$('#list');ul.replaceChildren();
   $('#lcount').textContent=S.list.length?`${S.list.length} 筆`:'';
+  fillList($('#list'));
+  if($('#main .home'))$('#main').replaceChildren(home());
+}
+// phones show the list on the home screen itself; the drawer is only opened from the menu button
+function home(){
+  if(!narrow.matches||S.view==='ask')return hero();
+  const ul=h('ul',{class:'list'});fillList(ul);
+  return h('section',{class:'home'},h('h2',{class:'home-t'},$('#crumbs').textContent||'全部',h('span',{class:'lcount',text:$('#lcount').textContent})),ul);
+}
+function fillList(ul){
+  ul.replaceChildren();
   if(S.listErr&&!S.list.length){ul.append(h('li',{class:'empty'},h('p',{text:'無法載入清單：'+S.listErr.message}),h('button',{type:'button',text:'重試',onclick:loadList})));return}
   if(!S.list.length){ul.append(h('li',{class:'empty',text:S.view==='trash'?'垃圾桶是空的':S.q?'找不到符合的錄音':S.view==='folder'||S.view==='none'?'這裡沒有錄音':'還沒有錄音，點「錄音」「匯入」或把檔案拖進視窗'}));return}
   for(const r of S.list){
@@ -912,7 +925,7 @@ function setDrawer(open){
 $('#menuBtn').append(icon('menu'));
 $('#menuBtn').onclick=()=>setDrawer(!$('#app').classList.contains('drawer'));
 $('#scrim').onclick=()=>setDrawer(false);
-narrow.addEventListener('change',()=>setDrawer(narrow.matches&&!S.id));
+narrow.addEventListener('change',()=>{setDrawer(false);if(!S.id&&S.view!=='ask')$('#main').replaceChildren(home())});
 
 /* ---------- import (R2 multipart via the Worker) ---------- */
 document.querySelectorAll('[data-import]').forEach(b=>b.onclick=()=>$('#fileInput').click());
@@ -1081,10 +1094,10 @@ function route(){
   S.id=id;S.tab=tab;S.d=null;S.showRaw=false;
   clearTimeout(detailTimer);
   if(S.player&&S.playerFor!==id){S.player.audio.pause();S.player=null;S.playerFor=null}
-  setDrawer(!id);
+  setDrawer(false);
   renderList();
   updateTitle();
-  if(!id){$('#main').replaceChildren(hero());return}
+  if(!id){$('#main').replaceChildren(home());return}
   $('#main').replaceChildren(h('div',{class:'placeholder',text:'載入中…'}));
   loadDetail();
 }

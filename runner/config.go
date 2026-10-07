@@ -20,6 +20,7 @@ type Config struct {
 	Diarize      bool
 	NumSpeakers  int // 0 = auto
 	ACPAgent     string
+	ACPModel     string // ANTHROPIC_MODEL for the agent; a plain alias keeps it off the global "opus[1m]" (needs usage credits)
 
 	APIBase            string // Worker origin
 	AccessClientID     string // Cloudflare Access service token
@@ -41,6 +42,7 @@ func loadConfig() Config {
 		Diarize:      os.Getenv("DIARIZE") != "0",
 		NumSpeakers:  n,
 		ACPAgent:     cmp.Or(os.Getenv("ACP_AGENT"), "claude-agent-acp"),
+		ACPModel:     cmp.Or(os.Getenv("ACP_MODEL"), "opus"),
 
 		APIBase:            cmp.Or(os.Getenv("API_BASE"), "https://records.3mi.ai"),
 		AccessClientID:     os.Getenv("CF_ACCESS_CLIENT_ID"),

@@ -62,6 +62,7 @@ func acpAsk(ctx context.Context, cfg Config, prompt string) (string, error) {
 	defer cancel()
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = cwd
+	cmd.Env = append(os.Environ(), "ANTHROPIC_MODEL="+cfg.ACPModel)
 	cmd.WaitDelay = 2 * time.Second
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

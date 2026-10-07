@@ -1139,11 +1139,13 @@ function renderDetail(){
   showTitle();
 
   const act=(label,fn,cls)=>h('button',{type:'button',class:cls,text:label,onclick:async e=>{e.target.closest('details').open=false;try{await fn()}catch(err){fail(err)}}});
+  // actions follow the recording's state: while it is processing only filing/trash make sense
+  const ready=r.status==='done',tab=ready?S.tab:'transcript';
   const menuItems=r.deleted_at?[
     act('還原',async()=>{await api(`/api/recordings/${r.id}/restore`,{method:'POST'});toast('已還原');S.d=null;loadList();loadFolders();loadDetail()}),
     act('永久刪除',async()=>{if(!confirm(`永久刪除「${r.title}」？此動作無法復原。`))return;await api(`/api/recordings/${r.id}?purge=1`,{method:'DELETE'});toast('已永久刪除');go(null);loadList()},'danger')
   ]:[
-    act('重新轉錄',async()=>{
+    BUSY(r.status)?null:act('重新轉錄',async()=>{
       const language=await askLang('重新轉錄','會覆蓋目前的逐字稿與講者名稱。','重新轉錄',r.language??SET.stt_lang);if(!language)return;
       await api(`/api/recordings/${r.id}/retranscribe`,{method:'POST',body:{language}});toast('已排入重新轉錄');loadList();loadDetail()}),
     act('移到資料夾…',async()=>{
@@ -1156,7 +1158,7 @@ function renderDetail(){
 
   const kids=[
     h('p',{class:'eyebrow',id:'deyebrow'}),
-    h('div',{class:'d-head'},titleH,r.deleted_at?null:capButton(),menu),
+    h('div',{class:'d-head'},titleH,r.deleted_at||!ready?null:capButton(),menu),
     h('div',{class:'d-sub',id:'dsub'})
   ];
   if(r.deleted_at)kids.push(h('div',{class:'notice',text:'這筆錄音在垃圾桶中。'}));
@@ -1165,13 +1167,13 @@ function renderDetail(){
   else if(r.status==='queued'&&noRunner())kids.push(h('div',{class:'notice busy',role:'status',text:'排隊中。'+NO_RUNNER}));
   else if(BUSY(r.status))kids.push(h('div',{class:'notice busy',role:'status',text:`處理中：${STATUS[r.status]||r.status}…（完成後會自動更新）`}));
 
-  const tabBtn=(id,label,n)=>h('button',{type:'button',role:'tab',id:'tab-'+id,'aria-selected':String(S.tab===id),'aria-controls':'pane-'+id,onclick:()=>go(r.id,id)},label,n?h('span',{class:'n',text:String(n)}):null);
-  kids.push(h('div',{class:'tabs',role:'tablist'},tabBtn('transcript','逐字稿',S.d.segments.length),tabBtn('summary','摘要',S.d.summaries.length)));
-  const pane=h('section',{id:'pane-'+S.tab,role:'tabpanel','aria-labelledby':'tab-'+S.tab});
+  const tabBtn=(id,label,n)=>h('button',{type:'button',role:'tab',id:'tab-'+id,'aria-selected':String(tab===id),'aria-controls':'pane-'+id,onclick:()=>go(r.id,id)},label,n?h('span',{class:'n',text:String(n)}):null);
+  kids.push(h('div',{class:'tabs',role:'tablist'},tabBtn('transcript','逐字稿',S.d.segments.length),ready?tabBtn('summary','摘要',S.d.summaries.length):null));
+  const pane=h('section',{id:'pane-'+tab,role:'tabpanel','aria-labelledby':'tab-'+tab});
   kids.push(pane);
   main.replaceChildren(h('div',{class:'detail'},kids));
   updateSub();
-  if(S.tab==='transcript')renderTranscript(pane);else renderSummaryTab(pane);
+  if(tab==='transcript')renderTranscript(pane);else renderSummaryTab(pane);
   updateTitle();
 }
 

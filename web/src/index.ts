@@ -88,9 +88,16 @@ const routes: [string, RegExp, Handler][] = [
     if (q.has("filename")) where.push(`r.filename=?`), args.push(q.get("filename"));
     if (q.has("size")) where.push(`r.size=?`), args.push(Number(q.get("size")));
     const limit = q.get("view") === "recent" ? " LIMIT 50" : "";
-    const { results } = await env.DB.prepare(`SELECT r.*, EXISTS(SELECT 1 FROM summaries s WHERE s.recording_id=r.id AND s.status='done') AS has_summary
-      FROM recordings r WHERE ${where.join(" AND ")} ORDER BY r.created_at DESC, r.id DESC${limit}`).bind(...args).all();
-    return results.map((r) => ({ ...r, has_summary: r.has_summary === 1 }));
+    // top_speakers = the two who talk longest, with their share of talk time (scans each recording's segments;
+    // ponytail: fine for hundreds of recordings, store per-recording totals if the list gets slow)
+    const { results } = await env.DB.prepare(`SELECT r.*, EXISTS(SELECT 1 FROM summaries s WHERE s.recording_id=r.id AND s.status='done') AS has_summary,
+        (SELECT json_group_array(json_object('name', name, 'pct', pct)) FROM (
+          SELECT sp.display_name AS name, CAST(round(100.0 * sum(g.end_ms - g.start_ms) /
+            max(1, (SELECT sum(end_ms - start_ms) FROM segments WHERE recording_id=r.id))) AS INTEGER) AS pct
+          FROM segments g JOIN speakers sp ON sp.id=g.speaker_id WHERE g.recording_id=r.id
+          GROUP BY g.speaker_id ORDER BY sum(g.end_ms - g.start_ms) DESC LIMIT 2)) AS top_speakers
+      FROM recordings r WHERE ${where.join(" AND ")} ORDER BY r.created_at DESC, r.id DESC${limit}`).bind(...args).all<Record<string, unknown>>();
+    return results.map((r) => ({ ...r, has_summary: r.has_summary === 1, top_speakers: JSON.parse(String(r.top_speakers ?? "[]")) }));
   }],
 
   ["GET", /^\/api\/recordings\/(\d+)$/, (_req, env, [rid]) => detail(env, id(rid))],

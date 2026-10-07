@@ -119,6 +119,11 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .item .m{display:flex;gap:10px;align-items:center;font-size:.78rem;color:var(--faint);flex-wrap:wrap}
 .item .m .mono{color:var(--mute)}
 .item .m .icon{color:var(--mute)}
+.item .m .tag{display:inline-flex;align-items:center;gap:4px;min-width:0;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .m .tag .icon{width:12px;height:12px;flex:none}
+.item .who{font-size:.75rem;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .who b{font-weight:500;color:var(--mute)}
+.item .who .icon{width:12px;height:12px;vertical-align:-1px;color:var(--mute)}
 .badge{display:inline-flex;align-items:center;gap:5px;font-size:.72rem;padding:1px 8px;border-radius:99px;background:var(--sunk);color:var(--mute);white-space:nowrap;font-weight:500}
 .badge.error{color:var(--danger);background:color-mix(in srgb,var(--danger) 12%,transparent)}
 .badge.busy{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
@@ -592,6 +597,7 @@ const DND=matchMedia('(pointer:fine)').matches;
 const narrow=matchMedia('(max-width:1099px)');
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 const ICONS = {
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/>',
   play:'<path d="M7 4l13 8-13 8z"/>', pause:'<path d="M7 4v16M17 4v16"/>',
   back:'<path d="M11 5L4 12l7 7M4 12h16"/>', fwd:'<path d="M13 5l7 7-7 7M20 12H4"/>',
   edit:'<path d="M4 20h4L19 9l-4-4L4 16z"/>', copy:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
@@ -714,7 +720,7 @@ function descendants(id){const out=[];const walk=p=>{for(const c of kids(p)){out
 function pathOf(id){const p=[];for(let f=fById(id);f&&p.length<64;f=fById(f.parent_id))p.unshift(f);return p}
 async function loadFolders(){
   try{S.folders=(await api('/api/folders')).map(f=>({...f,parent_id:f.parent_id??null}));S.foldersLoaded=true}catch(e){fail(e)}
-  if(S.view==='folder'&&!fById(S.folder))setView('all');else{renderNav();renderCrumbs();updateTitle()}
+  if(S.view==='folder'&&!fById(S.folder))setView('all');else{renderNav();renderCrumbs();updateTitle();renderList()} // list items show folder names
   if(S.d)updateSub();
 }
 // URL = #/<view>[/rec/<id>[/summary]]; the view part is kept while a recording is open
@@ -907,7 +913,11 @@ function fillList(ul){
         h('span',{text:fmtShort(r.created_at)}),
         r.duration_s!=null?h('span',{class:'mono',text:fmtDur(r.duration_s)}):null,
         badge,
-        r.has_summary?h('span',{title:'已有摘要','aria-label':'已有摘要'},icon('doc')):null));
+        r.has_summary?h('span',{title:'已有摘要','aria-label':'已有摘要'},icon('doc')):null,
+        // inside a folder view the folder is implied
+        r.folder_id&&S.view!=='folder'?h('span',{class:'tag',title:pathOf(r.folder_id).map(f=>f.name).join(' / ')},icon('folder'),pathOf(r.folder_id).at(-1)?.name??''):null),
+      r.top_speakers?.length?h('span',{class:'who',title:'講話時間最多'},icon('user'),' ',
+        r.top_speakers.flatMap((p,i)=>[i?'・':'',h('b',{text:p.name}),` ${p.pct}%`])):null);
     if(DND)b.addEventListener('dragstart',e=>{e.dataTransfer.setData(T_REC,String(r.id));e.dataTransfer.effectAllowed='move'});
     ul.append(h('li',{},b));
   }

@@ -2,16 +2,18 @@
 import { type Env, type Handler, HttpError, first, parseParts, partNumber, readJSON, runnerName, serveR2, splitFilename } from "./http";
 import { notifyJob } from "./push";
 import { getSettings } from "./settings";
+import { parseTerms, queueScan, saveTerms, scanJob } from "./vocab";
 import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
 const LEASE = `datetime('now','+10 minutes')`;
-const ACTIVE = { recordings: `status IN ('converting','transcribing','cleaning')`, summaries: `status='running'`, asks: `status='running'` };
+const ACTIVE = { recordings: `status IN ('converting','transcribing','cleaning')`, summaries: `status='running'`, asks: `status='running'`, vocab_scans: `status='running'` };
 const CHUNK_CHARS = 300_000; // JSON chars per bound parameter; D1 caps a value at 2 MB (CJK = 3 bytes/char)
 // ponytail: dates handed to the Ask LLM are Taiwan local; add a timezone setting if the user ever moves
 const TZ = `'+8 hours'`;
 
 type Kind = keyof typeof ACTIVE;
-const kindOf = (s: string): Kind => (s.startsWith("rec") ? "recordings" : s.startsWith("ask") ? "asks" : "summaries");
+const kindOf = (s: string): Kind =>
+  (s.startsWith("rec") ? "recordings" : s.startsWith("ask") ? "asks" : s.startsWith("vocab") ? "vocab_scans" : "summaries");
 const id = (s: string) => Number(s);
 
 // Records that a runner is alive; stt and build version are only known on claim.
@@ -43,15 +45,18 @@ export async function listRunners(env: Env) {
           FROM summaries s JOIN recordings rc ON rc.id=s.recording_id
           WHERE s.runner=r.name AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1),
         (SELECT json_object('kind','ask','id',id,'status',status,'title',question) FROM asks
-          WHERE runner=r.name AND ${ACTIVE.asks} AND lease_until > datetime('now') LIMIT 1)) AS job
+          WHERE runner=r.name AND ${ACTIVE.asks} AND lease_until > datetime('now') LIMIT 1),
+        (SELECT json_object('kind','vocab','id',id,'status',status) FROM vocab_scans
+          WHERE runner=r.name AND ${ACTIVE.vocab_scans} AND lease_until > datetime('now') LIMIT 1)) AS job
     FROM runners r ORDER BY r.last_seen DESC`).all<{ name: string; last_seen: string; stt: string | null; version: string | null; version_time: string | null; ago_s: number; job: string | null }>();
   const q = await env.DB.prepare(`SELECT
       (SELECT count(*) FROM recordings WHERE status='queued' AND deleted_at IS NULL) AS recordings,
       (SELECT count(*) FROM summaries WHERE status='queued') AS summaries,
-      (SELECT count(*) FROM asks WHERE status='queued') AS asks`).first<{ recordings: number; summaries: number; asks: number }>();
+      (SELECT count(*) FROM asks WHERE status='queued') AS asks,
+      (SELECT count(*) FROM vocab_scans WHERE status='queued') AS vocab`).first<{ recordings: number; summaries: number; asks: number; vocab: number }>();
   return {
     runners: results.map((r) => ({ ...r, online: r.ago_s < 180, job: r.job ? JSON.parse(r.job) : null })),
-    queued: q ?? { recordings: 0, summaries: 0, asks: 0 },
+    queued: q ?? { recordings: 0, summaries: 0, asks: 0, vocab: 0 },
   };
 }
 
@@ -89,6 +94,15 @@ async function askIndex(env: Env) {
   return results.map((r) => ({ ...r, speakers: JSON.parse(r.speakers) }));
 }
 
+// An existing (or lease-expired) scan, else a new one if one is due (queueScan).
+async function claimVocab(env: Env, runner: string) {
+  const claim = () => env.DB.prepare(`UPDATE vocab_scans SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
+    WHERE id=(SELECT id FROM vocab_scans WHERE status='queued' OR (${ACTIVE.vocab_scans} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
+    RETURNING id, from_id, to_id`).bind(runner).first<{ id: number; from_id: number; to_id: number }>();
+  const scan = (await claim()) ?? ((await queueScan(env, false)) ? await claim() : null);
+  return scan ? scanJob(env, scan) : null;
+}
+
 async function recording(env: Env, rid: number) {
   return first<{ filename: string; source_key: string | null; play_key: string | null; upload_id: string | null }>(
     env.DB.prepare(`SELECT filename, source_key, play_key, upload_id FROM recordings WHERE id=?`).bind(rid));
@@ -96,7 +110,7 @@ async function recording(env: Env, rid: number) {
 
 export const runnerRoutes: [string, RegExp, Handler][] = [
   ["POST", /^\/api\/runner\/claim$/, async (req, env) => {
-    const body = await readJSON<{ runner?: unknown; stt?: unknown; version?: unknown; version_time?: unknown; skip_recordings?: unknown; asks?: unknown }>(req);
+    const body = await readJSON<{ runner?: unknown; stt?: unknown; version?: unknown; version_time?: unknown; skip_recordings?: unknown; asks?: unknown; vocab?: unknown }>(req);
     const runner = runnerName(body);
     await seen(env, runner, body).run();
     // asks first (interactive, short); only runners that declare `asks: true` know the job kind
@@ -127,14 +141,15 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       WHERE id=(SELECT id FROM summaries WHERE status='queued' OR (${ACTIVE.summaries} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
       RETURNING id, recording_id, template_id, language`).bind(runner)
       .first<{ id: number; recording_id: number; template_id: string; language: string }>();
-    if (!sum) return { job: null };
+    // vocab scans last (background); only runners that declare `vocab: true` know the kind
+    if (!sum) return { job: body.vocab === true ? await claimVocab(env, runner) : null };
     const { about, content_focus, instructions, me, vocab } = await getSettings(env);
     const meName = me === null ? null : ((await env.DB.prepare(`SELECT name FROM people WHERE id=?`).bind(me).first<{ name: string }>())?.name ?? null);
     return { job: { kind: "summary", ...sum, transcript: await transcriptText(env, sum.recording_id),
       settings: { about, content_focus, instructions, me: meName, vocab } } };
   }],
 
-  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?)\/(\d+)\/heartbeat$/, async (req, env, [k, jid]) => {
+  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?|vocab)\/(\d+)\/heartbeat$/, async (req, env, [k, jid]) => {
     const body = await readJSON<{ runner?: unknown; status?: unknown }>(req);
     const kind = kindOf(k);
     let status: string | null = null;
@@ -283,8 +298,8 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
-  // Puts a claimed summary or ask straight back in the queue (runner shutting down).
-  ["POST", /^\/api\/runner\/(summar(?:y|ies)|asks?)\/(\d+)\/defer$/, async (req, env, [k, jid]) => {
+  // Puts a claimed summary, ask or vocab scan straight back in the queue (runner shutting down).
+  ["POST", /^\/api\/runner\/(summar(?:y|ies)|asks?|vocab)\/(\d+)\/defer$/, async (req, env, [k, jid]) => {
     const kind = kindOf(k);
     const r = await env.DB.prepare(`UPDATE ${kind} SET status='queued', runner=NULL, lease_until=NULL
       WHERE id=?1 AND runner=?2 AND ${ACTIVE[kind]}`).bind(id(jid), runnerName(await readJSON(req))).run();
@@ -292,13 +307,14 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
-  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?)\/(\d+)\/fail$/, async (req, env, [k, jid], _url, ctx) => {
+  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies)|asks?|vocab)\/(\d+)\/fail$/, async (req, env, [k, jid], _url, ctx) => {
     const kind = kindOf(k);
     const body = await readJSON<{ runner?: unknown; error?: unknown }>(req);
     const r = await env.DB.prepare(`UPDATE ${kind} SET status='error', error=?3, lease_until=NULL WHERE id=?1 AND runner=?2 AND ${ACTIVE[kind]}`)
       .bind(id(jid), runnerName(body), String(body.error ?? "failed")).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
-    ctx.waitUntil(notifyJob(env, kind, id(jid), `${{ recordings: "處理", summaries: "摘要", asks: "提問" }[kind]}失敗：${String(body.error ?? "failed").slice(0, 80)}`));
+    if (kind !== "vocab_scans") // a background scan is not worth a notification
+      ctx.waitUntil(notifyJob(env, kind, id(jid), `${{ recordings: "處理", summaries: "摘要", asks: "提問" }[kind]}失敗：${String(body.error ?? "failed").slice(0, 80)}`));
     return { ok: true };
   }],
 
@@ -334,6 +350,17 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       WHERE id=?1 AND runner=?2 AND ${ACTIVE.asks}`).bind(id(aid), runnerName(body), body.answer_md, JSON.stringify(sources)).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
     ctx.waitUntil(notifyJob(env, "asks", id(aid), "回答好了"));
+    return { ok: true };
+  }],
+
+  // {runner, terms:[{term, misheard, kind}]}: upsert + recount (vocab.ts), scan done — one transaction
+  ["POST", /^\/api\/runner\/vocab\/(\d+)\/result$/, async (req, env, [vid]) => {
+    const body = await readJSON<{ runner?: unknown; terms?: unknown }>(req);
+    const terms = parseTerms(body.terms);
+    await hold(env, "vocab_scans", id(vid), runnerName(body));
+    const r = await env.DB.batch([...saveTerms(env, terms), env.DB.prepare(`UPDATE vocab_scans SET status='done', error=NULL, lease_until=NULL
+      WHERE id=?1 AND runner=?2 AND ${ACTIVE.vocab_scans}`).bind(id(vid), runnerName(body))]);
+    if (!r.at(-1)!.meta.changes) throw new HttpError(409, "lease lost");
     return { ok: true };
   }],
 ];

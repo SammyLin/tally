@@ -7,6 +7,7 @@ import { notify, pushEnabled } from "./push";
 import { listRunners, runnerRoutes } from "./runner";
 import { STT_LANGS, getSettings, parseSettings, putSettings } from "./settings";
 import { enrol, isDefaultName, rematch, upsertPerson } from "./voice";
+import { vocabRoutes } from "./vocab";
 
 const PART_SIZE = 50 * 1024 * 1024;
 const PROCESSING = `('converting','transcribing','cleaning')`;
@@ -393,6 +394,7 @@ const routes: [string, RegExp, Handler][] = [
   }],
 
   ...askRoutes,
+  ...vocabRoutes,
   ...runnerRoutes,
 ];
 

@@ -392,3 +392,38 @@ Cross-recording Q&A: the user asks「志明上個月答應了什麼？」and get
 
 ### Limits
 - Step 1 sees only title, date, speakers and the summary start: a recording without a summary is found only by title/speaker/date. If recall is poor, add a transcript excerpt or a keyword pre-filter (SQL LIKE over segments) to the index.
+
+## Vocabulary suggestions (詞彙建議) — decided 2026-10-07
+
+`settings.vocab` is hand-maintained; the app learns candidates from the user's own transcripts and SUGGESTS them. It never changes `settings.vocab` by itself. Signals: cleanup fixes (`segments.text_raw` → `text_clean`, e.g.「德他」→「Delta」) and recurring proper nouns / jargon. Manual transcript edits are not logged (out of scope).
+
+### Schema (migration 0010)
+- `vocab_scans(id, from_id, to_id /* recording id range, inclusive */, status queued|running|done|error, error, runner, lease_until, created_at)`.
+- `vocab_suggestions(term PK, misheard /* JSON array of raw variants */, kind product|company|person|term|other, hits, fixes, recordings, status new|added|dismissed, updated_at)`.
+
+### Scheduling (inside claim, no cron)
+- Only runners that send `vocab: true` see the kind; claimed last (after asks, recordings, summaries). An existing queued / lease-expired scan is claimed first; else one is created if due and claimed.
+- Unscanned = done, non-deleted recordings with id > max(`to_id` of done scans) and below the lowest id still queued/processing (so a recording finishing late is not skipped). A scan takes the oldest 10.
+- Due when ≥ 10 unscanned, or ≥ 1 and no done scan created in the last 24 h; never while a scan is queued/running, and not within 1 h of a failed scan (no retry storm). Scan times are `created_at` (scans take seconds).
+- Same lease semantics as other kinds (10 min, heartbeat, defer, fail); a failed scan sends no push.
+
+### Runner API
+- Claim job: `{kind:"vocab", id, vocab:[settings.vocab], skip:[terms added/dismissed], recordings:[{id, title, diffs:[{raw, clean}], text}]}`. `diffs` = segments whose letters/digits differ after cleanup (whitespace/punctuation-only changes dropped), ≤ 150 per recording; `text` = cleaned transcript, ≤ 20k chars.
+- `POST /api/runner/vocab/{id}/result {runner, terms:[{term, misheard, kind}]}`: terms ≤ 50 chars, misheard ≤ 10; upsert (misheard merged, status kept — added/dismissed never come back), then recount the touched terms over all non-deleted recordings: `hits` = segments whose cleaned text contains the term, `recordings` = distinct recordings among them, `fixes` = those whose raw text contains a misheard variant. Scan → done.
+- `GET /api/runners`: `queued.vocab`; a runner's job may be `{kind:"vocab", id, status}` (UI「分析詞彙」).
+
+### Browser API (`web/src/vocab.ts`)
+| Method | Path | Body / result |
+|---|---|---|
+| GET | `/api/vocab/suggestions` | `{suggestions:[{term, misheard, kind, hits, fixes, recordings}], last_scan:{at, status, error}|null, pending}` — status new, hits > 0, not already in `settings.vocab`, by score `fixes*3 + hits + recordings*0.5`, ≤ 50 |
+| POST | `/api/vocab/suggestions/add` | `{term}` → appended to the END of `settings.vocab` (409 at 200 terms), status added; returns settings |
+| POST | `/api/vocab/suggestions/dismiss` | `{term}` → status dismissed |
+| POST | `/api/vocab/scan` | queue a scan now (ignores the 10 / 24 h / 1 h thresholds); 409 if one is queued/running or nothing is unscanned |
+
+Removing an added term from `settings.vocab` later leaves it `added` (no resurrection).
+
+### Runner (`runner/vocab.go`)
+One `acpAsk`: the diffs (all recordings) then the transcripts (sharing a 120k-char budget) → JSON array `[{term, misheard, kind}]`, ≤ 30, proper nouns / product, company, person names / jargon / mixed-language terms only. `parseVocab` takes the first JSON array of that shape (fences/prose tolerated), drops empty, > 50 chars, duplicates and terms in vocab/skip (case-insensitive).
+
+### UI
+Settings → 詞彙: a「建議加入」list above the vocab editor; each row = term + 「出現 N 次・M 份錄音・曾被聽成「…」」 with 加入 / 忽略, which act immediately (not part of 儲存). 加入 also appends the term to the open editor without touching other unsaved edits. Empty:「還沒有建議。累積更多錄音後會自動分析。」 Muted line: last scan time or error, then「立即分析」only when something is unscanned and no scan is running (「分析中…」while one is, polled every 5 s).

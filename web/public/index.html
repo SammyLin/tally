@@ -336,6 +336,8 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
 .prow button{padding:.25em .7em;font-size:.85rem}
 .prow input[type=text]{flex:1;min-width:8em;width:auto;font-size:.95rem;padding:.35em .6em}
 .me{font-weight:400;opacity:.75;letter-spacing:0}
+button.linkbtn{border:0;background:none;padding:0;border-radius:0;color:var(--ink2);text-decoration:underline;text-underline-offset:2px;font-size:inherit}
+button.linkbtn:hover{background:none;color:var(--ink)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px;border:1px solid var(--line);border-radius:var(--r-s);background:var(--panel);cursor:text}
 .chiplist{display:contents}
 .chip{display:inline-flex;align-items:center;background:var(--sunk);border-radius:99px;padding:0 0 0 10px;font-size:.85rem;max-width:100%;overflow-wrap:anywhere}
@@ -560,6 +562,7 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
         <div class="fld"><span class="lbl">講者（改名、刪除立即生效）</span><ul class="plist" id="personList"></ul></div>
       </section>
       <section class="set-sec"><h3>詞彙</h3>
+        <div class="fld" id="sugBox" hidden><span class="lbl">建議加入（加入、忽略立即生效）</span><ul class="plist" id="sugList"></ul><p class="hint" id="sugMeta"></p></div>
         <div class="chips" id="vocabBox"><span class="chiplist" id="vocabChips"></span><input id="vocabIn" type="text" autocomplete="off" placeholder="專有名詞，Enter 或逗號加入" aria-label="新增詞彙"></div>
         <p class="hint" id="vocabHint"></p>
       </section>
@@ -693,6 +696,7 @@ function runnerRow(r,latest){
     :!j?'閒置，等待工作'
     :j.kind==='recording'?`處理中：#${j.id}「${j.title}」· ${STATUS[j.status]||j.status}`
     :j.kind==='ask'?`回答提問：「${j.title}」`
+    :j.kind==='vocab'?'分析詞彙'
     :`產生摘要：#${j.recording_id}「${j.title}」`;
   return h('li',{class:'rrow'},h('span',{class:'rdot'+(r.online?' on':''),'aria-hidden':'true'}),
     h('div',{},h('b',{text:r.name}),r.stt?h('span',{class:'badge',text:r.stt==='groq'?'Groq':'本機 Whisper'}):null,versionBadge(r,latest),h('div',{class:'muted',text:what})),
@@ -710,7 +714,7 @@ function renderRunners(){
     b.classList.toggle('warn',!on&&q>0);
     b.title=on?`${on} 台 runner 在線`:'沒有 runner 在線';
   }
-  $('#runnersQueue').textContent=`排隊中：${d.queued.recordings} 份錄音、${d.queued.summaries} 份摘要、${d.queued.asks||0} 個提問`;
+  $('#runnersQueue').textContent=`排隊中：${d.queued.recordings} 份錄音、${d.queued.summaries} 份摘要、${d.queued.asks||0} 個提問${d.queued.vocab?'、詞彙分析':''}`;
   $('#runnersList').replaceChildren(...(d.runners.length?d.runners.map(r=>runnerRow(r,latestBuild(d.runners))):[h('li',{class:'muted',text:'還沒有 runner 連線過。'})]));
 }
 async function loadRunners(){
@@ -1708,7 +1712,7 @@ function renderMeSel(v){
 async function openSettings(){
   await Promise.all([loadSettings(),loadPersons()]);
   setMsg('');$('#setBar').hidden=true;
-  fillSettings();renderPersons();renderPush();
+  fillSettings();renderPersons();renderPush();SUG=null;renderSug();loadSug();
   setDlg.showModal();setDlg.querySelector('.set-body').scrollTop=0;
 }
 function closeSettings(){if(setDirty())$('#setBar').hidden=false;else setDlg.close()}
@@ -1760,6 +1764,40 @@ $('#vocabIn').addEventListener('input',e=>{
   const v=e.target.value;if(!/[,，、]/.test(v))return;
   const parts=v.split(/[,，、]/);e.target.value=parts.pop();addVocab(parts.join(','));
 });
+
+/* vocab suggestions: act immediately (like persons); 加入 also lands in the open editor without touching other unsaved edits */
+let SUG=null,sugTimer;
+async function loadSug(){
+  clearTimeout(sugTimer);
+  try{SUG=await api('/api/vocab/suggestions')}catch(e){SUG=null;console.warn('vocab',e)} // an old Worker has no suggestions
+  renderSug();
+  if(SUG&&scanning()&&setDlg.open)sugTimer=setTimeout(loadSug,5000);
+}
+const scanning=()=>['queued','running'].includes(SUG?.last_scan?.status);
+function renderSug(){
+  $('#sugBox').hidden=!SUG;if(!SUG)return;
+  $('#sugList').replaceChildren(...(SUG.suggestions.length?SUG.suggestions.map(sugRow):[h('li',{class:'hint',text:'還沒有建議。累積更多錄音後會自動分析。'})]));
+  const l=SUG.last_scan;
+  $('#sugMeta').replaceChildren(...[
+    scanning()?'分析中…':l?.status==='error'?`上次分析失敗：${l.error||''}`:l?`上次分析：${fmtDate(l.at)}`:null,
+    !scanning()&&SUG.pending?h('button',{type:'button',class:'linkbtn',text:'立即分析',onclick:scanNow}):null,
+  ].filter(Boolean).flatMap((x,i)=>i?['・',x]:[x]));
+}
+async function scanNow(e){
+  e.currentTarget.disabled=true;setMsg('');
+  try{await api('/api/vocab/scan',{method:'POST'})}catch(err){setMsg(err.message)}
+  loadSug();
+}
+function sugRow(s){
+  const meta=[`出現 ${s.hits} 次`,`${s.recordings} 份錄音`,s.misheard.length?`曾被聽成「${s.misheard.slice(0,3).join('」「')}」`:null].filter(Boolean).join('・');
+  const act=(label,cls,path,done)=>h('button',{type:'button',class:cls,text:label,'aria-label':`${label}「${s.term}」`,onclick:async e=>{
+    const b=e.currentTarget;b.disabled=true;setMsg('');
+    try{done(await api(path,{method:'POST',body:{term:s.term}}));SUG.suggestions=SUG.suggestions.filter(x=>x!==s);renderSug()}
+    catch(err){setMsg(err.message);b.disabled=false}}});
+  return h('li',{class:'prow'},h('span',{class:'pn'},h('b',{text:s.term}),h('span',{class:'pm',text:meta})),
+    act('加入','','/api/vocab/suggestions/add',set=>{SET={...SET_DEF,...set};if(!setVocab.includes(s.term))setVocab.push(s.term);renderVocab()}),
+    act('忽略','ghost','/api/vocab/suggestions/dismiss',()=>{}));
+}
 
 function renderPersons(){
   $('#personList').replaceChildren(...(personsErr?[h('li',{class:'hint',text:'無法載入講者：'+personsErr})]

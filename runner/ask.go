@@ -127,15 +127,8 @@ func answerPrompt(question, today string, docs []askDoc) string {
 // numbers, numeric strings or {"id": n} objects. Keeps ids in valid, in order, without duplicates, at most limit.
 func parsePicked(reply string, valid map[int64]bool, limit int) []int64 {
 	var items []any
-	for rest := reply; ; rest = rest[1:] {
-		i := strings.IndexByte(rest, '[')
-		if i < 0 {
-			return nil
-		}
-		rest, items = rest[i:], nil
-		if json.NewDecoder(strings.NewReader(rest)).Decode(&items) == nil {
-			break
-		}
+	if !firstJSONArray(reply, &items) {
+		return nil
 	}
 	var out []int64
 	seen := map[int64]bool{}
@@ -160,6 +153,20 @@ func parsePicked(reply string, valid map[int64]bool, limit int) []int64 {
 		}
 	}
 	return out
+}
+
+// firstJSONArray decodes the first '[' in reply that starts a valid JSON value of v's type (a slice pointer).
+func firstJSONArray(reply string, v any) bool {
+	for rest := reply; ; rest = rest[1:] {
+		i := strings.IndexByte(rest, '[')
+		if i < 0 {
+			return false
+		}
+		rest = rest[i:]
+		if json.NewDecoder(strings.NewReader(rest)).Decode(v) == nil {
+			return true
+		}
+	}
 }
 
 // fitBudget keeps transcripts (most relevant first) while their total length stays within budget chars and

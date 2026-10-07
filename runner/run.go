@@ -22,7 +22,7 @@ var (
 
 // job is a claimed unit of work (POST /api/runner/claim).
 type job struct {
-	Kind        string      `json:"kind"` // recording | summary | ask
+	Kind        string      `json:"kind"` // recording | summary | ask | vocab
 	ID          int64       `json:"id"`
 	Filename    string      `json:"filename"`
 	SourceSize  int64       `json:"source_size"`
@@ -34,6 +34,9 @@ type job struct {
 	Question    string      `json:"question"` // ask only
 	Today       string      `json:"today"`    // ask: YYYY-MM-DD, the user's local date
 	Index       []askEntry  `json:"index"`    // ask: every done recording
+	Vocab       []string    `json:"vocab"`    // vocab: the current settings.vocab
+	Skip        []string    `json:"skip"`     // vocab: terms already added or dismissed
+	Recordings  []vocabRec  `json:"recordings"`
 }
 
 // jobSettings is the runner-relevant subset of the user's settings; absent fields keep the old behaviour.
@@ -52,9 +55,9 @@ type task struct {
 	status atomic.Pointer[string]
 }
 
-// path is /api/runner/{recordings|summaries|asks}/<id>/<action>.
+// path is /api/runner/{recordings|summaries|asks|vocab}/<id>/<action>.
 func (t *task) path(action string) string {
-	kind := cmp.Or(map[string]string{"summary": "summaries", "ask": "asks"}[t.Kind], "recordings")
+	kind := cmp.Or(map[string]string{"summary": "summaries", "ask": "asks", "vocab": "vocab"}[t.Kind], "recordings")
 	return fmt.Sprintf("/api/runner/%s/%d/%s", kind, t.ID, action)
 }
 
@@ -96,7 +99,7 @@ func run(ctx context.Context, cfg Config) error {
 			Job *job `json:"job"`
 		}
 		skip := time.Now().Before(sttPausedUntil)
-		err := c.json(ctx, "POST", "/api/runner/claim", map[string]any{"runner": c.runner, "stt": cfg.STTProvider, "skip_recordings": skip, "asks": true, "version": rev, "version_time": revAt}, &res)
+		err := c.json(ctx, "POST", "/api/runner/claim", map[string]any{"runner": c.runner, "stt": cfg.STTProvider, "skip_recordings": skip, "asks": true, "vocab": true, "version": rev, "version_time": revAt}, &res)
 		if err != nil && ctx.Err() == nil {
 			slog.Error("claim", "err", err)
 		}
@@ -155,6 +158,8 @@ func runJob(stop context.Context, cfg Config, c *client, j *job) {
 		})
 	case "ask":
 		err = safely(func() error { return answer(ctx, cfg, t) })
+	case "vocab":
+		err = safely(func() error { return suggestVocab(ctx, cfg, t) })
 	default:
 		err = fmt.Errorf("unknown job kind %q", t.Kind)
 	}

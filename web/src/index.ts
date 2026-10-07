@@ -1,3 +1,4 @@
+import { askRoutes } from "./ask";
 import { verifyAccessJwt } from "./auth";
 import {
   type Env, type Handler, HttpError, errorResponse, first, languages, parseParts, partNumber, readJSON, serveR2, splitFilename, templates,
@@ -377,6 +378,7 @@ const routes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
+  ...askRoutes,
   ...runnerRoutes,
 ];
 

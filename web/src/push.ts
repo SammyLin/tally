@@ -87,9 +87,14 @@ export async function notify(env: Env, msg: Msg) {
 }
 
 // A finished/failed job → notification titled with its recording; clicking opens the recording (summary tab for summaries).
-export async function notifyJob(env: Env, kind: "recordings" | "summaries", jid: number, body: string) {
+export async function notifyJob(env: Env, kind: "recordings" | "summaries" | "asks", jid: number, body: string) {
   try {
     if (!pushEnabled(env)) return;
+    if (kind === "asks") {
+      const a = await env.DB.prepare(`SELECT question FROM asks WHERE id=?`).bind(jid).first<{ question: string }>();
+      if (a) await notify(env, { title: a.question.slice(0, 60), body, url: `/#/ask/${jid}`, tag: `ask-${jid}` });
+      return;
+    }
     const rec = await env.DB.prepare(kind === "summaries"
       ? `SELECT r.id, r.title FROM summaries s JOIN recordings r ON r.id=s.recording_id WHERE s.id=?`
       : `SELECT id, title FROM recordings WHERE id=?`).bind(jid).first<{ id: number; title: string }>();

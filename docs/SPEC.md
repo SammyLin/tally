@@ -357,3 +357,38 @@ Multiple prints per person = one per enrolled speaker (unchanged, `speaker_id UN
 - `NumThreads` = performance-core count (`sysctl hw.perflevel0.physicalcpu`, fallback 4) for segmentation and all extractors. Not `runtime.NumCPU()`: on a 4P+6E Mac, 10 onnxruntime threads made sherpa 4x slower than 4 (rec 3, 13 min: 274 s → 66 s for diarize + voiceprint, measured 2026-10-05). Sherpa itself costs ~3 s per audio-minute (sliding windows overlap), not ~1.
 - `splitCollapsed` unchanged (only runs on a single-speaker result; not the slowness cause). Never run two runners or a runner + sweep on one Mac.
 - Existing recordings keep their old speaker split (no re-diarization); `--recompute` only re-embeds.
+
+## Ask (問問看) — decided 2026-10-07
+
+Cross-recording Q&A: the user asks「志明上個月答應了什麼？」and gets a Markdown answer where every claim cites recording + timestamp. Personal scale (tens to a few hundred recordings): no embeddings, no vector DB; the runner's local LLM (ACP, like summaries) does retrieval in two steps.
+
+### Schema (migration 0009)
+`asks(id INTEGER PRIMARY KEY AUTOINCREMENT, question TEXT NOT NULL, answer_md TEXT, sources TEXT /* JSON array of recording ids used */, status TEXT NOT NULL DEFAULT 'queued' /* queued|running|done|error */, error TEXT, runner TEXT, lease_until TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`.
+
+### Browser API (`web/src/ask.ts`)
+| Method | Path | Body / result |
+|---|---|---|
+| POST | `/api/asks` | `{question}` (trimmed, 1–1000 chars) → `{id}` |
+| GET | `/api/asks` | newest 50: `[{id, question, status, created_at, preview}]` (preview = answer start without citations/markdown, ≤ 120 chars, or null) |
+| GET | `/api/asks/{id}` | full row, `sources` parsed, plus `recordings: [{id, title, deleted}]` for sources ∪ cited ids (purged ones absent) |
+| DELETE | `/api/asks/{id}` | delete (a runner still working on it gets 409 on result = lease lost) |
+| POST | `/api/asks/{id}/retry` | errored ask → queued; 409 otherwise |
+
+### Runner API (`web/src/runner.ts`)
+- `POST /api/runner/claim` claims asks FIRST (interactive, short), then recordings, then summaries; same lease semantics (10 min, heartbeat, lease-expired reclaim, defer, fail). Only runners that send `asks: true` get asks (an older runner would fail the unknown kind). Job: `{kind:"ask", id, question, today:"YYYY-MM-DD", index:[{id, title, date, duration_s, speakers:[names with segments], summary: first 300 chars of the newest done summary | null}]}` over all non-deleted done recordings, newest first. `today` and `date` are Taiwan local dates (`+8 hours`; no timezone setting yet).
+- `GET /api/runner/asks/{id}/transcripts?ids=1,2,3&runner=<name>` (1–20 ids; runner must hold the lease, which this extends) → `[{id, title, date, transcript}]` in the requested order, skipping deleted/not-done ids; transcript = the summary job's `[mm:ss] Name: text` lines (mm may exceed 59).
+- `POST /api/runner/asks/{id}/result` `{runner, answer_md, sources:[ids]}` → done.
+- Heartbeat / fail / defer: the generic `/api/runner/{kind}/{id}/…` routes accept `ask(s)`.
+- `GET /api/runners`: `queued.asks`; a runner's current job may be `{kind:"ask", id, status, title: question}`.
+
+### Runner (`runner/ask.go`)
+1. Prompt with today's date, the question and the index (one JSON line per recording) → LLM returns a JSON array of ≤ 8 ids, most relevant first. `parsePicked` takes the first JSON array in the reply (fences/prose tolerated; numbers, numeric strings or `{id}` objects), keeps only index ids, dedupes, caps at 8.
+2. Fetch those transcripts; `fitBudget` keeps them in relevance order within 150k chars (CJK ≈ 1 token/char, stays inside a 200k-token context; dropped ids are logged; a single over-long first transcript is cut). Prompt: answer only from the transcripts, cite `[[<recording_id>@mm:ss]]` (or `h:mm:ss`) right after each claim, answer in the question's language, say plainly when not found. Nothing picked → step 2 still runs with "no relevant recordings" so the "not found" reply is in the question's language.
+3. Post `answer_md` (fence-stripped) and `sources` = transcripts actually used.
+
+### UI
+- Sidebar「問問看」(message-circle-question icon) under 全部; route `#/ask[/<id>]`. The library pane lists past asks (newest first, status badge, answer preview); main has the question box (Enter sends, Shift+Enter newline), example questions, and the selected ask: question, date, then 排隊中 (with the no-runner notice) / 思考中 / error + 重試 / the answer, plus「參考錄音」chips. Polls every 3 s while any ask is queued/running.
+- Citations render as chips「<recording title> mm:ss」linking to `#/all/rec/<id>`; the transcript seeks there (and scrolls to that segment) once it renders. Several ids in one bracket (`[[3@01:00, 4@02:00]]`) are accepted.
+
+### Limits
+- Step 1 sees only title, date, speakers and the summary start: a recording without a summary is found only by title/speaker/date. If recall is poor, add a transcript excerpt or a keyword pre-filter (SQL LIKE over segments) to the index.

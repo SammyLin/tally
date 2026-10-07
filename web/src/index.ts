@@ -360,6 +360,13 @@ const routes: [string, RegExp, Handler][] = [
 
   ["GET", /^\/api\/runners$/, (_req, env) => listRunners(env)],
 
+  // Forget an offline runner (online = seen within 3 min, as in listRunners); it re-registers if it ever claims again.
+  ["DELETE", /^\/api\/runners\/([^/]+)$/, async (_req, env, [name]) => {
+    const r = await env.DB.prepare(`DELETE FROM runners WHERE name=? AND last_seen < datetime('now','-3 minutes')`).bind(decodeURIComponent(name)).run();
+    if (!r.meta.changes) throw new HttpError(409, "runner is online or unknown");
+    return { ok: true };
+  }],
+
   // ---- Web Push (push.ts); key null = VAPID keys unset, the UI hides the toggle
   ["GET", /^\/api\/push\/key$/, async (_req, env) => ({ key: pushEnabled(env) ? env.VAPID_PUBLIC_KEY : null })],
 

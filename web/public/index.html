@@ -407,14 +407,16 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   .player{top:calc(57px + env(safe-area-inset-top))}
   .hero{min-height:calc(100dvh - 57px)}
   .home{padding:16px 8px 96px}
+  .home-q{margin:0 8px 14px}
   .home-t{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:0 8px 6px;font-family:var(--serif);font-size:20px}
   .home .list{overflow:visible;padding:0}
 }
 @media (max-width:767px){
   .topbar .rchip .rtxt{display:none}
+  /* phones: the list (and search) live on the home screen, so the drawer is navigation only */
   .lib{display:flex;flex-direction:column;width:min(88vw,380px)}
-  .nav{flex:none;max-height:46%;border-right:0;border-bottom:1px solid var(--line)}
-  .pane{flex:1}
+  .nav{flex:1;border-right:0}
+  .lib .pane{display:none}
   .detail{padding:22px 16px 190px}
   .d-sub{gap:4px 12px}
   .seg{grid-template-columns:auto 1fr;gap:0 6px;padding:10px 10px 10px 14px}
@@ -903,13 +905,17 @@ function renderList(){
   if(S.view==='ask')return renderAskList();
   $('#lcount').textContent=S.list.length?`${S.list.length} 筆`:'';
   fillList($('#list'));
-  if($('#main .home'))$('#main').replaceChildren(home());
+  const hm=$('#main .home');if(hm){fillList(hm.querySelector('ul'));hm.querySelector('.lcount').textContent=$('#lcount').textContent}
 }
 // phones show the list on the home screen itself; the drawer is only opened from the menu button
 function home(){
   if(!narrow.matches||S.view==='ask')return hero();
   const ul=h('ul',{class:'list'});fillList(ul);
-  return h('section',{class:'home'},h('h2',{class:'home-t'},$('#crumbs').textContent||'全部',h('span',{class:'lcount',text:$('#lcount').textContent})),ul);
+  // same search as the library pane's #q (hidden on phones); kept in sync so either one shows the current query
+  const q=h('input',{type:'search',value:S.q||'',placeholder:'搜尋標題或逐字稿內容','aria-label':'搜尋',oninput:e=>{
+    $('#q').value=e.target.value;clearTimeout(qTimer);qTimer=setTimeout(()=>{S.q=e.target.value.trim();loadList()},250)}});
+  return h('section',{class:'home'},h('div',{class:'search home-q'},icon('search'),q),
+    h('h2',{class:'home-t'},$('#crumbs').textContent||'全部',h('span',{class:'lcount',text:$('#lcount').textContent})),ul);
 }
 function fillList(ul){
   ul.replaceChildren();

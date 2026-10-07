@@ -2,6 +2,7 @@ import { verifyAccessJwt } from "./auth";
 import {
   type Env, type Handler, HttpError, errorResponse, first, languages, parseParts, partNumber, readJSON, serveR2, splitFilename, templates,
 } from "./http";
+import { notify, pushEnabled } from "./push";
 import { listRunners, runnerRoutes } from "./runner";
 import { STT_LANGS, getSettings, parseSettings, putSettings } from "./settings";
 import { enrol, isDefaultName, rematch, upsertPerson } from "./voice";
@@ -351,6 +352,31 @@ const routes: [string, RegExp, Handler][] = [
 
   ["GET", /^\/api\/runners$/, (_req, env) => listRunners(env)],
 
+  // ---- Web Push (push.ts); key null = VAPID keys unset, the UI hides the toggle
+  ["GET", /^\/api\/push\/key$/, async (_req, env) => ({ key: pushEnabled(env) ? env.VAPID_PUBLIC_KEY : null })],
+
+  ["POST", /^\/api\/push\/subscribe$/, async (req, env) => { // body = PushSubscription.toJSON()
+    const b = await readJSON<{ endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }>(req);
+    const { p256dh, auth } = b.keys ?? {};
+    if (typeof b.endpoint !== "string" || !b.endpoint.startsWith("https://") || typeof p256dh !== "string" || typeof auth !== "string")
+      throw new HttpError(400, "{endpoint: https URL, keys: {p256dh, auth}} required");
+    await env.DB.prepare(`INSERT INTO push_subscriptions(endpoint, p256dh, auth) VALUES(?1, ?2, ?3)
+      ON CONFLICT(endpoint) DO UPDATE SET p256dh=?2, auth=?3`).bind(b.endpoint, p256dh, auth).run();
+    return { ok: true };
+  }],
+
+  ["DELETE", /^\/api\/push\/subscribe$/, async (req, env) => {
+    const b = await readJSON<{ endpoint?: unknown }>(req);
+    if (typeof b.endpoint !== "string") throw new HttpError(400, "endpoint required");
+    await env.DB.prepare(`DELETE FROM push_subscriptions WHERE endpoint=?`).bind(b.endpoint).run();
+    return { ok: true };
+  }],
+
+  ["POST", /^\/api\/push\/test$/, async (_req, env) => {
+    await notify(env, { title: "Tally", body: "通知已開啟", url: "/", tag: "test" });
+    return { ok: true };
+  }],
+
   ...runnerRoutes,
 ];
 
@@ -369,7 +395,7 @@ async function denied(req: Request, env: Env): Promise<Response | null> {
 }
 
 export default {
-  async fetch(req, env): Promise<Response> {
+  async fetch(req, env, ctx): Promise<Response> {
     const url = new URL(req.url);
     const deny = await denied(req, env);
     if (deny) return deny;
@@ -383,7 +409,7 @@ export default {
       pathMatched = true;
       if (m !== method) continue;
       try {
-        const v = await handler(req, env, match.slice(1), url);
+        const v = await handler(req, env, match.slice(1), url, ctx);
         return v instanceof Response ? v : Response.json(v);
       } catch (e) {
         if (e instanceof HttpError) return errorResponse(e.status, e.message);

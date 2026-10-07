@@ -1,5 +1,6 @@
 // Runner job API: jobs are claimed with a lease; a lease that expires makes the job claimable again.
 import { type Env, type Handler, HttpError, first, parseParts, partNumber, readJSON, runnerName, serveR2, splitFilename } from "./http";
+import { notifyJob } from "./push";
 import { getSettings } from "./settings";
 import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
@@ -235,7 +236,7 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
-  ["POST", /^\/api\/runner\/recordings\/(\d+)\/done$/, async (req, env, [rs]) => {
+  ["POST", /^\/api\/runner\/recordings\/(\d+)\/done$/, async (req, env, [rs], _url, ctx) => {
     const rid = id(rs);
     const runner = runnerName(await readJSON(req));
     const { source_key } = await recording(env, rid);
@@ -243,6 +244,7 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       WHERE id=?1 AND runner=?2 AND ${ACTIVE.recordings}`).bind(rid, runner).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
     if (source_key) await env.AUDIO.delete(source_key);
+    ctx.waitUntil(notifyJob(env, "recordings", rid, "逐字稿完成"));
     return { ok: true };
   }],
 
@@ -265,21 +267,23 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     return { ok: true };
   }],
 
-  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/fail$/, async (req, env, [k, jid]) => {
+  ["POST", /^\/api\/runner\/(recordings?|summar(?:y|ies))\/(\d+)\/fail$/, async (req, env, [k, jid], _url, ctx) => {
     const kind = kindOf(k);
     const body = await readJSON<{ runner?: unknown; error?: unknown }>(req);
     const r = await env.DB.prepare(`UPDATE ${kind} SET status='error', error=?3, lease_until=NULL WHERE id=?1 AND runner=?2 AND ${ACTIVE[kind]}`)
       .bind(id(jid), runnerName(body), String(body.error ?? "failed")).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
+    ctx.waitUntil(notifyJob(env, kind, id(jid), `${kind === "summaries" ? "摘要" : "處理"}失敗：${String(body.error ?? "failed").slice(0, 80)}`));
     return { ok: true };
   }],
 
-  ["POST", /^\/api\/runner\/summar(?:y|ies)\/(\d+)\/result$/, async (req, env, [sid]) => {
+  ["POST", /^\/api\/runner\/summar(?:y|ies)\/(\d+)\/result$/, async (req, env, [sid], _url, ctx) => {
     const body = await readJSON<{ runner?: unknown; content_md?: unknown }>(req);
     if (typeof body.content_md !== "string") throw new HttpError(400, "content_md required");
     const r = await env.DB.prepare(`UPDATE summaries SET status='done', content_md=?3, error=NULL, lease_until=NULL
       WHERE id=?1 AND runner=?2 AND ${ACTIVE.summaries}`).bind(id(sid), runnerName(body), body.content_md).run();
     if (!r.meta.changes) throw new HttpError(409, "lease lost");
+    ctx.waitUntil(notifyJob(env, "summaries", id(sid), "摘要完成"));
     return { ok: true };
   }],
 ];

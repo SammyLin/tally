@@ -6,9 +6,12 @@ export interface Env {
   DEV_NO_AUTH?: string;
   VOICE_MATCH_THRESHOLD?: string;
   VOICE_SUGGEST_THRESHOLD?: string;
+  VAPID_PUBLIC_KEY?: string; // Web Push, see push.ts
+  VAPID_PRIVATE_KEY?: string;
+  VAPID_SUBJECT?: string;
 }
 
-export type Handler = (req: Request, env: Env, params: string[], url: URL) => Promise<unknown>;
+export type Handler = (req: Request, env: Env, params: string[], url: URL, ctx: ExecutionContext) => Promise<unknown>;
 
 export class HttpError extends Error {
   constructor(readonly status: number, message: string) {

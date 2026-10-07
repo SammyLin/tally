@@ -6,6 +6,7 @@ runner/.env
 web/node_modules/
 web/.wrangler/
 .dev.vars
+web/.vapid-private-key.txt
 runner/.env.home
 
 # macOS: AppleDouble files on exFAT/SMB volumes, Finder metadata

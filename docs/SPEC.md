@@ -267,6 +267,12 @@ Runner still runs cleanup + title via local ACP between `transcript` and `done`,
 - Commands: `tally run` (default: loop claim → process → sleep 10 s when idle; graceful on SIGINT/SIGTERM: the current job gets 5 s, then is handed back with `POST /api/runner/{recordings|summaries}/{id}/defer` `{seconds:0}` so another runner picks it up at once; a crash is covered by the 10 min lease), `tally ingest <dir>` (upload via the multipart API; subfolder path → folder tree via folders API, reuse existing; skip files already uploaded by filename+size via `GET /api/recordings?filename=&size=`), `tally models`.
 - Pipeline logic (ffmpeg, STT, diarize, split, cleanup batching/parsing, prompts, title) is reused; only DB access is replaced by HTTP calls.
 
+### Web Push (decided 2026-10-07)
+- `src/push.ts`, no dependencies: VAPID (RFC 8292, ES256) + `aes128gcm` (RFC 8291). Env: `VAPID_PUBLIC_KEY` (var, base64url uncompressed P-256 point), `VAPID_SUBJECT` (var), `VAPID_PRIVATE_KEY` (secret, base64url raw `d`). Keys unset → no-op, UI hides the toggle.
+- Table `push_subscriptions` (migration 0008). `GET /api/push/key` → `{key|null}`, `POST /api/push/subscribe` (body = `PushSubscription.toJSON()`, upsert), `DELETE /api/push/subscribe` `{endpoint}`, `POST /api/push/test`.
+- Runner `done` / `fail` / summary `result` → `ctx.waitUntil(notifyJob(...))` to every subscription; never fails the runner request; 404/410 deletes the subscription. Click opens `/#/rec/<id>[/summary]`.
+- `public/sw.js` = push + notificationclick only (no caching). iOS needs the home-screen PWA (16.4+).
+
 ### UI (web/public/index.html)
 - Everything above + folders (see Folders section) + mobile: works at 360 px; library becomes a drawer on narrow screens.
 - Record button (MediaRecorder, mic): shows timer + level; on stop uploads via the multipart API (iOS gives audio/mp4, others audio/webm — keep the extension matching the mime). Keep screen awake during recording where supported (Wake Lock API).

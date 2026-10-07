@@ -537,6 +537,11 @@ input[type=radio]{accent-color:var(--sig);width:1.05em;height:1.05em;margin:0}
         <div class="chips" id="vocabBox"><span class="chiplist" id="vocabChips"></span><input id="vocabIn" type="text" autocomplete="off" placeholder="專有名詞，Enter 或逗號加入" aria-label="新增詞彙"></div>
         <p class="hint" id="vocabHint"></p>
       </section>
+      <section class="set-sec" id="pushSec" hidden><h3>通知</h3>
+        <div class="chk"><label class="chk" id="pushRow"><input type="checkbox" id="pushOn"> 完成時通知我</label>
+          <button type="button" class="ghost" id="pushTest" style="margin-left:auto;font-size:.85rem;padding:.25em .7em" hidden>送測試通知</button></div>
+        <p class="hint" id="pushHint" hidden>iPhone 需先「加入主畫面」再從主畫面開啟才能收到通知</p>
+      </section>
       <p class="hint">設定只影響之後的新工作；既有錄音可重新轉錄或重新產生摘要。</p>
     </div>
     <div class="set-foot">
@@ -1526,7 +1531,7 @@ function renderMeSel(v){
 async function openSettings(){
   await Promise.all([loadSettings(),loadPersons()]);
   setMsg('');$('#setBar').hidden=true;
-  fillSettings();renderPersons();
+  fillSettings();renderPersons();renderPush();
   setDlg.showModal();setDlg.querySelector('.set-body').scrollTop=0;
 }
 function closeSettings(){if(setDirty())$('#setBar').hidden=false;else setDlg.close()}
@@ -1614,6 +1619,45 @@ function personRow(p){
   }
   view();return li;
 }
+
+/* ---------- push notifications (sw.js) ---------- */
+const swReg='serviceWorker' in navigator?navigator.serviceWorker.register('/sw.js').catch(e=>{console.warn('sw',e);return null}):Promise.resolve(null);
+// notification click with Tally already open: sw.js posts the target URL; only its hash routes (assigning "/" would reload)
+if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{
+  const hash=e.data?.open&&new URL(e.data.open).hash;if(hash&&hash!==location.hash)location.hash=hash});
+let PUSH_KEY;
+const b64uBytes=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+async function renderPush(){
+  try{
+    if(PUSH_KEY===undefined)PUSH_KEY=(await api('/api/push/key')).key;
+    const reg=await swReg,ok=!!(PUSH_KEY&&reg&&'PushManager' in window&&'Notification' in window);
+    // iOS has Web Push only in a home-screen PWA
+    const ios=/iP(hone|od|ad)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const hint=!!PUSH_KEY&&!ok&&ios&&!(navigator.standalone||matchMedia('(display-mode: standalone)').matches);
+    $('#pushSec').hidden=!ok&&!hint;$('#pushHint').hidden=!hint;$('#pushRow').hidden=!ok;$('#pushTest').hidden=true;
+    if(!ok)return;
+    const sub=await reg.pushManager.getSubscription();
+    $('#pushOn').checked=!!sub&&Notification.permission==='granted';$('#pushTest').hidden=!$('#pushOn').checked;
+    if(sub)api('/api/push/subscribe',{method:'POST',body:sub.toJSON()}).catch(()=>{}); // re-register in case the server dropped it
+  }catch(e){console.warn('push',e);$('#pushSec').hidden=true}
+}
+$('#pushOn').onchange=async e=>{
+  const on=e.target;on.disabled=true;
+  try{
+    if(on.checked){
+      // ask first: iOS only shows the prompt inside the user gesture
+      if(await Notification.requestPermission()!=='granted'){on.checked=false;toast('通知權限被封鎖，請到瀏覽器或系統設定允許 Tally 通知',5000);return}
+      const sub=await (await swReg).pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(PUSH_KEY)});
+      await api('/api/push/subscribe',{method:'POST',body:sub.toJSON()});
+      toast('已開啟通知');
+    }else{
+      const sub=await (await swReg).pushManager.getSubscription();
+      if(sub){await api('/api/push/subscribe',{method:'DELETE',body:{endpoint:sub.endpoint}});await sub.unsubscribe()}
+    }
+  }catch(err){on.checked=!on.checked;fail(err)}
+  finally{on.disabled=false;$('#pushTest').hidden=!on.checked}
+};
+$('#pushTest').onclick=()=>api('/api/push/test',{method:'POST'}).then(()=>toast('已送出測試通知'),fail);
 
 /* ---------- keyboard ---------- */
 addEventListener('keydown',e=>{

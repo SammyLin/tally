@@ -287,10 +287,10 @@ details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(-
 .ask-q{flex:1;min-width:0;margin:0;font-family:var(--serif);font-size:1.12rem;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
 .ask-src{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid var(--line2);font-size:.8rem;color:var(--faint)}
 .item .p{font-size:.8rem;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cite{display:inline-flex;align-items:baseline;gap:5px;max-width:100%;vertical-align:baseline;font-size:.78rem;line-height:1.6;padding:0 8px;margin:0 2px;border-radius:99px;background:var(--sig-soft);color:var(--ink2);text-decoration:none!important;white-space:nowrap}
-.cite:hover{background:var(--sel)}
+.cite{display:inline-flex;align-items:baseline;gap:4px;max-width:100%;vertical-align:baseline;font-size:.72rem;line-height:1.6;padding:0 3px;margin:0 1px;border-radius:4px;color:var(--faint);opacity:.6;text-decoration:none!important;white-space:nowrap;transition:opacity .15s,color .15s}
+.cite:hover,.cite:focus-visible{opacity:1;color:var(--ink2);background:var(--sunk)}
 .cite .ct{overflow:hidden;text-overflow:ellipsis;max-width:16em;min-width:0}
-.cite .mono{color:var(--sig)}
+.cite .mono{color:inherit}
 @media (min-width:1100px){.ask-recent{display:none}} /* the library pane lists them there */
 
 /* ---- dialogs, toasts, drop ---- */
@@ -1615,10 +1615,11 @@ function renderAskBody(){
     used.length?h('div',{class:'ask-src'},'參考錄音',used.map(id=>citeChip(recs.get(id),id,null))):null));
 }
 // opens the recording (transcript) and, with ms, seeks there once it renders
-function citeChip(rec,id,ms){
+// short = time only (same recording as the previous citation in this paragraph); the title stays in the tooltip
+function citeChip(rec,id,ms,short){
   const label=rec?rec.title:`錄音 #${id}`,t=ms!=null?fmtDur(ms/1000):null;
   return h('a',{href:`#/all/rec/${id}`,class:'cite',title:(rec?.deleted?'（在垃圾桶）':'')+label+(t?' '+t:''),onclick:()=>{S.seek=ms!=null?{id,ms}:null}},
-    h('span',{class:'ct',text:label}),t?h('span',{class:'mono',text:t}):null);
+    short&&t?null:h('span',{class:'ct',text:label}),t?h('span',{class:'mono',text:t}):null);
 }
 // [[id@mm:ss]] / [[id@h:mm:ss]] (several may share one bracket) → chips; private-use chars carry them through markdown
 function renderAnswer(md,recs){
@@ -1629,7 +1630,15 @@ function renderAnswer(md,recs){
   });
   const div=renderMd(src),walk=document.createTreeWalker(div,NodeFilter.SHOW_TEXT),nodes=[];
   while(walk.nextNode())if(walk.currentNode.nodeValue.includes(''))nodes.push(walk.currentNode);
-  for(const n of nodes)n.replaceWith(...n.nodeValue.split(/(\d+)/).map((s,i)=>i%2?citeChip(recs.get(cites[+s][0]),...cites[+s]):s));
+  let lastId=null,lastBlock=null;
+  for(const n of nodes){
+    const block=n.parentElement.closest('li,p,td')||div;
+    n.replaceWith(...n.nodeValue.split(/(\d+)/).map((s,i)=>{
+      if(i%2===0)return s;
+      const [id,ms]=cites[+s],short=block===lastBlock&&id===lastId;lastId=id;lastBlock=block;
+      return citeChip(recs.get(id),id,ms,short);
+    }));
+  }
   return div;
 }
 

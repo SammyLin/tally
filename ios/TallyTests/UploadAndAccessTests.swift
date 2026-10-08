@@ -77,3 +77,18 @@ struct AccessTests {
         #expect(AppModel.normalize("ftp://x") == nil)
     }
 }
+
+struct CloudTests {
+    @Test func mediaLoaderURLsAndRanges() {
+        #expect(MediaLoader.wrap(URL(string: "https://kiroku.3mi.ai/media/7")!)?.absoluteString == "kiroku-https://kiroku.3mi.ai/media/7")
+        #expect(MediaLoader.total(contentRange: "bytes 0-1/12345") == 12345)
+        #expect(MediaLoader.total(contentRange: "bytes */99") == 99)
+        #expect(MediaLoader.total(contentRange: nil) == nil)
+    }
+
+    @Test func serverConfigDecodes() throws {
+        let json = #"{"auth_mode":"clerk","clerk_publishable_key":"pk_test_x","app_name":"Kiroku"}"#
+        let c = try Backend.decoder.decode(ServerConfig.self, from: Data(json.utf8))
+        #expect(c.authMode == "clerk" && c.clerkPublishableKey == "pk_test_x")
+    }
+}

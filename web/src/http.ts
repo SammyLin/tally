@@ -9,13 +9,23 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string; // Web Push, see push.ts
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
+  AUTH_MODE?: string; // "clerk" = Kiroku Cloud (multi-user); unset/"access" = self-host behind Cloudflare Access, user 1
+  CLERK_PUBLISHABLE_KEY?: string;
+  CLERK_AUTHORIZED_PARTIES?: string; // comma list of origins accepted in a token's azp
+  CLERK_SECRET_KEY?: string; // secret: Backend API (user email)
+  RUNNER_TOKEN?: string; // secret: /api/runner/* bearer token in clerk mode
 }
 
-export type Handler = (req: Request, env: Env, params: string[], url: URL, ctx: ExecutionContext) => Promise<unknown>;
+export const isCloud = (env: Env) => env.AUTH_MODE === "clerk";
+
+// uid = the caller's users.id (user routes); runner routes get 0 and act on each job row's user_id.
+export type Handler = (req: Request, env: Env, params: string[], url: URL, ctx: ExecutionContext, uid: number) => Promise<unknown>;
 
 export class HttpError extends Error {
-  constructor(readonly status: number, message: string) {
+  readonly status: number; // no parameter property: node's type stripping (test/idor.test.ts imports the routes) can't erase one
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 

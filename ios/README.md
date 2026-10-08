@@ -1,6 +1,6 @@
 # Tally for iOS
 
-SwiftUI app (iOS 17+, no dependencies) for the Tally backend. Features (same API as the web front end):
+SwiftUI app (iOS 17+; one dependency, Clerk's `clerk-ios` 1.6.1 via SPM for Kiroku Cloud sign-in) for the Tally backend. Features (same API as the web front end):
 
 - **Record**: keeps recording in the background and with the screen locked. You choose a title, folder and transcription language when you save.
 - **Upload queue**: multipart uploads in 50 MiB parts, retried until they succeed. Queued items can be deleted (asks first). You can also import audio/video files with a chosen language.
@@ -63,6 +63,19 @@ The `KirokuShare` target (bundle ID `ai.3mi.tally.share`, embedded in the app) s
 - API calls send the JWT in the `cf-access-token` header, and never as a cookie. The player sends it as a `CF_Authorization` cookie on the media request.
 - When the token expires, the next 401/403 shows the login screen again, and the upload queue pauses until you sign in.
 - Settings → 變更後端 logs you out and clears the web view's cookies. Items still in the upload queue start over on the new backend, in 未分類.
+
+## Login (Kiroku Cloud)
+
+- The connect screen's **Kiroku Cloud** button reads `GET /api/config` from https://kiroku.3mi.ai (DEBUG override:
+  launch argument `-cloudURL http://127.0.0.1:8800`), configures Clerk with the returned publishable key, and shows Clerk's
+  `AuthView` (email code; Apple / Google only if enabled on the Clerk instance). The custom-URL / Access path is unchanged.
+- Every request sends `Authorization: Bearer <session token>`, fetched per request (`Clerk.shared.auth.getToken()`; the SDK
+  caches it and refreshes it before its 60 s expiry), so the upload queue keeps working. A 401 shows the sign-in again.
+- Playback goes through `MediaLoader` (an `AVAssetResourceLoaderDelegate`): each range request gets a fresh token, since
+  AVPlayer would otherwise keep reusing one that expires mid-playback.
+- Settings → 登出 / 變更後端 calls `Clerk.shared.auth.signOut()` and clears the stored cloud mode.
+- `maestro/cloud/13-cloud-login.yaml` signs in a Clerk test user (`…+clerk_test@example.com`, code 424242); it is not part of
+  the default suite since it needs a backend in clerk mode: `maestro test ios/maestro/cloud -e CLOUD=http://127.0.0.1:8800`.
 
 ## TestFlight
 

@@ -53,16 +53,16 @@ export function parseSettings(patch: Record<string, unknown>): Partial<Settings>
   return out as Partial<Settings>;
 }
 
-export async function getSettings(env: Env): Promise<Settings> {
-  const { results } = await env.DB.prepare(`SELECT key, value FROM settings`).all<{ key: string; value: string }>();
+export async function getSettings(env: Env, uid: number): Promise<Settings> {
+  const { results } = await env.DB.prepare(`SELECT key, value FROM settings WHERE user_id=?`).bind(uid).all<{ key: string; value: string }>();
   const s: Record<string, unknown> = { ...DEFAULTS };
   for (const r of results) if (r.key in DEFAULTS) s[r.key] = JSON.parse(r.value);
   return s as Settings;
 }
 
-export async function putSettings(env: Env, patch: Partial<Settings>) {
+export async function putSettings(env: Env, uid: number, patch: Partial<Settings>) {
   const stmts = Object.entries(patch).map(([k, v]) =>
-    env.DB.prepare(`INSERT INTO settings(key, value) VALUES(?1, ?2) ON CONFLICT(key) DO UPDATE SET value=?2`).bind(k, JSON.stringify(v)));
+    env.DB.prepare(`INSERT INTO settings(user_id, key, value) VALUES(?3, ?1, ?2) ON CONFLICT(user_id, key) DO UPDATE SET value=?2`).bind(k, JSON.stringify(v), uid));
   if (stmts.length) await env.DB.batch(stmts);
-  return getSettings(env);
+  return getSettings(env, uid);
 }

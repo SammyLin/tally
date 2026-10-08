@@ -115,7 +115,8 @@ struct DetailView: View {
             if let fs: [Folder] = try? await app.get("api/folders") { folders = fs }
             // play.m4a is uploaded mid-pipeline: the player shows as soon as it exists (web: play_key)
             if player == nil, d.recording.playKey != nil || d.recording.status == "done", let b = app.backend {
-                player = Player(url: b.base.appending(path: "media/\(id)"), backend: b, fallbackDuration: d.recording.durationS)
+                player = Player(url: b.base.appending(path: "media/\(id)"), backend: b, fallbackDuration: d.recording.durationS,
+                                freshHeaders: app.mediaHeaders)
             }
             if let ms = seekMs, !sought, let player {
                 sought = true

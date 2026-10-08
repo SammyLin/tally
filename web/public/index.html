@@ -152,6 +152,10 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .picklist{display:grid;gap:2px;max-height:55vh;overflow:auto;margin:0 -6px}
 .pk{border:0;background:none;text-align:left;padding:.5em .6em;padding-left:calc(.6em + var(--d,0)*16px);display:flex;gap:8px;align-items:center;border-radius:var(--r-s)}
 .pk[aria-current=true]{background:var(--sel);font-weight:600}
+/* Kiroku Cloud: signed-out landing + Clerk user button (structure only; look comes from the theme) */
+.landing{min-height:100dvh;display:grid;place-content:center;gap:14px;text-align:center;padding:24px}
+.landing .acts{display:flex;gap:8px;justify-content:center}
+[data-user]{display:flex;align-items:center}
 .alert{position:fixed;top:0;left:0;right:0;z-index:50;background:var(--danger);color:#fff;padding:10px 16px;padding-top:calc(10px + env(safe-area-inset-top));display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap}
 .alert button{background:#fff;color:#000;border-color:#fff}
 
@@ -463,6 +467,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
     <span class="tb-title"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg>Kiroku</span>
     <button type="button" class="rchip" data-runners aria-label="Runner 狀態"></button>
     <button type="button" class="rec" data-rec>錄音</button>
+    <div data-user hidden></div>
   </header>
   <div class="scrim" id="scrim"></div>
   <aside class="lib" id="lib" aria-label="錄音清單">
@@ -474,6 +479,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
           <button type="button" data-import>匯入</button>
         </div>
         <button type="button" class="rchip" data-runners aria-label="Runner 狀態"></button>
+        <div data-user hidden></div>
         <input id="fileInput" class="sr" type="file" multiple tabindex="-1" aria-hidden="true"
           accept="audio/*,video/*,.ogg,.opus,.oga,.rmvb,.rm,.divx,.ts,.m2ts,.3gp,.f4v,.asr">
       </div>
@@ -594,6 +600,12 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   </form>
 </dialog>
 
+<main class="landing" id="landing" hidden>
+  <h1><span class="mark" aria-hidden="true"></span>Kiroku 記錄</h1>
+  <p>錄音、逐字稿與摘要，一個地方記下所有對話。</p>
+  <div class="acts"><button type="button" id="signIn">登入</button><button type="button" class="rec" id="signUp">註冊</button></div>
+</main>
+
 <div class="drop" id="drop" aria-hidden="true">放開以匯入音訊或影片</div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 
@@ -648,8 +660,8 @@ function h(tag, props, ...kids){
 }
 
 async function api(path, opt={}){
-  const init={method:opt.method||'GET',redirect:'manual'};
-  if(opt.body!==undefined){init.headers={'Content-Type':'application/json'};init.body=JSON.stringify(opt.body)}
+  const init={method:opt.method||'GET',redirect:'manual',headers:await authHeaders()};
+  if(opt.body!==undefined){init.headers['Content-Type']='application/json';init.body=JSON.stringify(opt.body)}
   let r;
   try{r=await fetch(path,init)}catch{throw new Error('網路錯誤，無法連線到伺服器')}
   // Access redirects to its login page once the session cookie expires
@@ -662,7 +674,8 @@ function httpErr(status,txt){
   let d=null;try{d=JSON.parse(txt)}catch{}
   let msg=d&&(d.detail??d.error);
   if(msg!=null&&typeof msg!=='string')msg=JSON.stringify(msg);
-  if(status===401||status===403){showAlert('登入已過期或沒有權限（'+status+'），請重新整理頁面以重新登入。');msg='登入已過期'}
+  if(status===401&&clerk){clerk.signOut();msg='登入已過期'} // the Clerk listener shows the landing page
+  else if(status===401||status===403){showAlert('登入已過期或沒有權限（'+status+'），請重新整理頁面以重新登入。');msg='登入已過期'}
   else if(status===503)showAlert('服務暫時無法使用（503）'+(msg?'：'+msg:'')+'，請稍後重新整理。');
   const e=new Error(msg||(txt&&!txt.startsWith('<')?txt.slice(0,200):`HTTP ${status}`));e.status=status;return e;
 }
@@ -1036,10 +1049,12 @@ async function uploadOne(file,folder_id,language,onprog){
   }
   return id;
 }
-function putPart(url,blob,onprog,live){
+async function putPart(url,blob,onprog,live){
+  const auth=await authHeaders();
   return new Promise((res,rej)=>{
     const x=new XMLHttpRequest();live.add(x);
     x.open('PUT',url);x.setRequestHeader('Content-Type','application/octet-stream');
+    for(const [k,v] of Object.entries(auth))x.setRequestHeader(k,v);
     x.upload.onprogress=e=>onprog(e.loaded);
     x.onload=()=>{live.delete(x);
       if(x.status<200||x.status>=300)return rej(httpErr(x.status,x.responseText));
@@ -1901,11 +1916,55 @@ addEventListener('keydown',e=>{
 });
 document.addEventListener('click',e=>{document.querySelectorAll('details.menu[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});
 
-loadSettings().then(()=>{if(S.d)renderDetail()});
-loadFolders();
-loadList();
-loadRunners();
-route();
+function start(){
+  loadSettings().then(()=>{if(S.d)renderDetail()});
+  loadFolders();
+  loadList();
+  loadRunners();
+  route();
+}
+
+/* ---------- boot: self-host (Cloudflare Access) or Kiroku Cloud (Clerk sign-in) ---------- */
+let clerk=null;
+const CLERK_JS='https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6.38.1/dist/clerk.browser.js';
+const CLERK_UI='https://cdn.jsdelivr.net/npm/@clerk/ui@1.39.1/dist/ui.browser.js'; // clerk-js 6 renders its components from @clerk/ui
+// SRI: these scripts see every session token, so a tampered CDN copy must not run (bump both hashes with the versions)
+const CLERK_JS_SRI='sha384-GGvezhr1z8BosGxc1db0emyOWcewf7nU9P2IhL/lzqQ8BVX0Jf1AVEXQDvjZuu1h';
+const CLERK_UI_SRI='sha384-JURm9wdjJAXgZgYoUr/he6OnzyOON7ft3Z9M9qaATJE3o2Za6+Bl77SNVSnlDIY0';
+async function authHeaders(){
+  const t=clerk&&await clerk.session?.getToken().catch(()=>null);
+  return t?{Authorization:'Bearer '+t}:{};
+}
+function loadJs(src,attrs={}){
+  return new Promise((res,rej)=>{
+    const el=h('script',{src,crossorigin:'anonymous',...attrs});
+    el.onload=res;el.onerror=()=>rej(new Error('無法載入登入元件'));document.head.append(el);
+  });
+}
+async function boot(){
+  let cfg=null;
+  try{const r=await fetch('/api/config');if(r.ok)cfg=await r.json()}catch{}
+  if(cfg?.auth_mode!=='clerk')return start();
+  $('#app').hidden=true;
+  try{
+    await loadJs(CLERK_UI,{integrity:CLERK_UI_SRI});
+    await loadJs(CLERK_JS,{integrity:CLERK_JS_SRI,'data-clerk-publishable-key':cfg.clerk_publishable_key});
+    await window.Clerk.load({ui:{ClerkUI:window.__internal_ClerkUICtor}});
+  }catch(e){showAlert('登入服務無法使用：'+e.message);return}
+  clerk=window.Clerk;
+  const signedIn=!!clerk.user;
+  clerk.addListener(({user})=>{if(!!user!==signedIn)location.replace('/')}); // sign-in / sign-out: start over
+  if(!signedIn){
+    $('#signIn').onclick=()=>clerk.openSignIn();
+    $('#signUp').onclick=()=>clerk.openSignUp();
+    $('#landing').hidden=false;
+    return;
+  }
+  document.querySelectorAll('[data-user]').forEach(el=>{el.hidden=false;clerk.mountUserButton(el)});
+  $('#app').hidden=false;
+  start();
+}
+boot();
 </script>
 </body>
 </html>

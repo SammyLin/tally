@@ -14,3 +14,4 @@ runner/.env.home
 .DS_Store
 # sherpa dylibs belong in runner/lib/ (ignored); stray copies next to the binary
 runner/*.dylib
+.dev.vars.*

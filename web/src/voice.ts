@@ -1,5 +1,5 @@
 // Voiceprints: a user-named speaker's embedding enrols it as a print of that person; unconfirmed speakers
-// (default "Speaker N" name, or auto-labelled) are matched against all VOICE_MODEL prints. auto: 0 runner/user, 1 matched,
+// (default "Speaker N" name, or auto-labelled) are matched against the same user's VOICE_MODEL prints. auto: 0 runner/user, 1 matched,
 // 2 user renamed to a default name (a rejected match; never auto-labelled again).
 import type { Env } from "./http";
 
@@ -49,41 +49,42 @@ export function matchSpeakers(cands: Candidate[], prints: Print[], threshold: nu
   return { auto: autoLabel ? auto : new Map<number, number>(), suggest };
 }
 
-// people ids must stay stable (voiceprints hang off them), so no REPLACE; last_used_at = recency for the UI
-export const upsertPerson = (db: D1Database, name: string) =>
-  db.prepare(`INSERT INTO people(name) VALUES(?) ON CONFLICT(name) DO UPDATE SET last_used_at=datetime('now')`).bind(name);
+// people ids must stay stable (voiceprints hang off them), so no REPLACE; last_used_at = recency for the UI. Names are per user.
+export const upsertPerson = (db: D1Database, uid: number, name: string) =>
+  db.prepare(`INSERT INTO people(user_id, name) VALUES(?, ?) ON CONFLICT(user_id, name) DO UPDATE SET last_used_at=datetime('now')`).bind(uid, name);
 
-// Names speaker `sid` as person `name` (confirmed) and upserts its voiceprint if it has an embedding.
+// Names speaker `sid` (of user `uid`) as person `name` (confirmed) and upserts its voiceprint if it has an embedding.
 // backfill: only if the speaker is still called `name` (a concurrent rename wins), and without bumping the
 // person's last_used_at (the people list's recency order is for real use).
-export const enrol = (db: D1Database, sid: number, name: string, backfill = false) => [
-  backfill ? db.prepare(`INSERT OR IGNORE INTO people(name) VALUES(?)`).bind(name) : upsertPerson(db, name),
-  db.prepare(`UPDATE speakers SET display_name=?2, person_id=(SELECT id FROM people WHERE name=?2), auto=0
-    WHERE id=?1${backfill ? " AND display_name=?2" : ""}`).bind(sid, name),
-  db.prepare(`INSERT INTO voiceprints(person_id, speaker_id, embedding, emb_model)
-    SELECT person_id, id, embedding, coalesce(emb_model, '${LEGACY_MODEL}') FROM speakers
-    WHERE id=?1 AND display_name=?2 AND person_id IS NOT NULL AND embedding IS NOT NULL
-    ON CONFLICT(speaker_id) DO UPDATE SET person_id=excluded.person_id, embedding=excluded.embedding, emb_model=excluded.emb_model`).bind(sid, name),
+export const enrol = (db: D1Database, uid: number, sid: number, name: string, backfill = false) => [
+  backfill ? db.prepare(`INSERT OR IGNORE INTO people(user_id, name) VALUES(?, ?)`).bind(uid, name) : upsertPerson(db, uid, name),
+  db.prepare(`UPDATE speakers SET display_name=?2, person_id=(SELECT id FROM people WHERE user_id=?3 AND name=?2), auto=0
+    WHERE id=?1 AND user_id=?3${backfill ? " AND display_name=?2" : ""}`).bind(sid, name, uid),
+  db.prepare(`INSERT INTO voiceprints(person_id, speaker_id, embedding, emb_model, user_id)
+    SELECT person_id, id, embedding, coalesce(emb_model, '${LEGACY_MODEL}'), user_id FROM speakers
+    WHERE id=?1 AND display_name=?2 AND user_id=?3 AND person_id IS NOT NULL AND embedding IS NOT NULL
+    ON CONFLICT(speaker_id) DO UPDATE SET person_id=excluded.person_id, embedding=excluded.embedding, emb_model=excluded.emb_model`).bind(sid, name, uid),
 ];
 
 type Row = { id: number; recording_id: number; label: string; display_name: string; person_id: number | null; auto: number;
   embedding: string | null; suggest_person_id: number | null; suggest_score: number | null };
 
-// Re-labels unconfirmed speakers (of one recording, or all) from the current VOICE_MODEL voiceprints; an auto
+// Re-labels user `uid`'s unconfirmed speakers (of one recording, or all of theirs) from that user's from the current VOICE_MODEL voiceprints; an auto
 // label that no longer matches (or every one, with settings.auto_label off) goes back to its default "Speaker N".
 // Also (re)sets every speaker's suggestion.
 // Returns the number of speakers changed.
 // ponytail: loads every print (and every speaker when rid is omitted) into memory; fine for a few thousand.
-export async function rematch(env: Env, rid?: number) {
+export async function rematch(env: Env, uid: number, rid?: number) {
   const db = env.DB;
   const cols = `id, recording_id, label, display_name, person_id, auto, suggest_person_id, suggest_score,
     CASE WHEN emb_model=?1 THEN embedding END AS embedding`;
   const [sp, vp, al] = await db.batch([
     rid === undefined
-      ? db.prepare(`SELECT ${cols} FROM speakers ORDER BY id`).bind(VOICE_MODEL)
-      : db.prepare(`SELECT ${cols} FROM speakers WHERE recording_id=?2 ORDER BY id`).bind(VOICE_MODEL, rid),
-    db.prepare(`SELECT v.person_id, v.embedding, p.name FROM voiceprints v JOIN people p ON p.id=v.person_id WHERE v.emb_model=?`).bind(VOICE_MODEL),
-    db.prepare(`SELECT value FROM settings WHERE key='auto_label'`), // inline, not getSettings: keeps this file node-testable
+      ? db.prepare(`SELECT ${cols} FROM speakers WHERE user_id=?2 ORDER BY id`).bind(VOICE_MODEL, uid)
+      : db.prepare(`SELECT ${cols} FROM speakers WHERE recording_id=?2 AND user_id=?3 ORDER BY id`).bind(VOICE_MODEL, rid, uid),
+    db.prepare(`SELECT v.person_id, v.embedding, p.name FROM voiceprints v JOIN people p ON p.id=v.person_id
+      WHERE v.emb_model=?1 AND v.user_id=?2 AND p.user_id=?2`).bind(VOICE_MODEL, uid),
+    db.prepare(`SELECT value FROM settings WHERE user_id=? AND key='auto_label'`).bind(uid), // inline, not getSettings: keeps this file node-testable
   ]);
   const rows = sp.results as Row[];
   const prints = (vp.results as { person_id: number; embedding: string; name: string }[]);
@@ -114,7 +115,7 @@ export async function rematch(env: Env, rid?: number) {
     if (name === s.display_name && pid === s.person_id && a === s.auto && gp === s.suggest_person_id && gs === s.suggest_score) continue;
     // guarded by the values read, so a concurrent user rename wins
     stmts.push(db.prepare(`UPDATE speakers SET display_name=?4, person_id=?5, auto=?6, suggest_person_id=?7, suggest_score=?8
-      WHERE id=?1 AND display_name=?2 AND auto=?3`).bind(s.id, s.display_name, s.auto, name, pid, a, gp, gs));
+      WHERE id=?1 AND display_name=?2 AND auto=?3 AND user_id=?9`).bind(s.id, s.display_name, s.auto, name, pid, a, gp, gs, uid));
   }
   if (stmts.length) await db.batch(stmts);
   return stmts.length;

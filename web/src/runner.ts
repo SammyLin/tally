@@ -1,8 +1,10 @@
 // Runner job API: jobs are claimed with a lease; a lease that expires makes the job claimable again.
+// Runners are shared across users: claims are global (oldest first) and every route acts on the job row's user_id.
+// ponytail: no per-user fairness; one heavy user can delay others until Phase 2 queues.
 import { type Env, type Handler, HttpError, first, parseParts, partNumber, readJSON, runnerName, serveR2, splitFilename } from "./http";
 import { notifyJob } from "./push";
 import { getSettings } from "./settings";
-import { parseTerms, queueScan, saveTerms, scanJob } from "./vocab";
+import { parseTerms, queueScan, saveTerms, scanCandidates, scanJob } from "./vocab";
 import { LEGACY_MODEL, VOICE_MODEL, enrol, isDefaultName, isEmbModel, isEmbedding, rematch } from "./voice";
 
 const LEASE = `datetime('now','+10 minutes')`;
@@ -35,29 +37,30 @@ async function hold(env: Env, kind: Kind, jid: number, runner: string, status: s
 }
 
 // Online = contacted within 3 min (idle runners poll every 10 s, busy ones heartbeat every 60 s).
-export async function listRunners(env: Env) {
+// Jobs and queue counts are the caller's own; `cloud` folds the (shared) runners into one "Kiroku Cloud" entry.
+export async function listRunners(env: Env, uid: number, cloud: boolean) {
   const { results } = await env.DB.prepare(`SELECT r.name, r.last_seen, r.stt, r.version, r.version_time,
       CAST(strftime('%s','now') - strftime('%s', r.last_seen) AS INTEGER) AS ago_s,
       coalesce(
         (SELECT json_object('kind','recording','id',id,'status',status,'title',title) FROM recordings
-          WHERE runner=r.name AND ${ACTIVE.recordings} AND lease_until > datetime('now') LIMIT 1),
+          WHERE runner=r.name AND user_id=?1 AND ${ACTIVE.recordings} AND lease_until > datetime('now') LIMIT 1),
         (SELECT json_object('kind','summary','id',s.id,'recording_id',s.recording_id,'status',s.status,'title',rc.title)
           FROM summaries s JOIN recordings rc ON rc.id=s.recording_id
-          WHERE s.runner=r.name AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1),
+          WHERE s.runner=r.name AND s.user_id=?1 AND s.${ACTIVE.summaries} AND s.lease_until > datetime('now') LIMIT 1),
         (SELECT json_object('kind','ask','id',id,'status',status,'title',question) FROM asks
-          WHERE runner=r.name AND ${ACTIVE.asks} AND lease_until > datetime('now') LIMIT 1),
+          WHERE runner=r.name AND user_id=?1 AND ${ACTIVE.asks} AND lease_until > datetime('now') LIMIT 1),
         (SELECT json_object('kind','vocab','id',id,'status',status) FROM vocab_scans
-          WHERE runner=r.name AND ${ACTIVE.vocab_scans} AND lease_until > datetime('now') LIMIT 1)) AS job
-    FROM runners r ORDER BY r.last_seen DESC`).all<{ name: string; last_seen: string; stt: string | null; version: string | null; version_time: string | null; ago_s: number; job: string | null }>();
+          WHERE runner=r.name AND user_id=?1 AND ${ACTIVE.vocab_scans} AND lease_until > datetime('now') LIMIT 1)) AS job
+    FROM runners r ORDER BY r.last_seen DESC`).bind(uid).all<{ name: string; last_seen: string; stt: string | null; version: string | null; version_time: string | null; ago_s: number; job: string | null }>();
   const q = await env.DB.prepare(`SELECT
-      (SELECT count(*) FROM recordings WHERE status='queued' AND deleted_at IS NULL) AS recordings,
-      (SELECT count(*) FROM summaries WHERE status='queued') AS summaries,
-      (SELECT count(*) FROM asks WHERE status='queued') AS asks,
-      (SELECT count(*) FROM vocab_scans WHERE status='queued') AS vocab`).first<{ recordings: number; summaries: number; asks: number; vocab: number }>();
-  return {
-    runners: results.map((r) => ({ ...r, online: r.ago_s < 180, job: r.job ? JSON.parse(r.job) : null })),
-    queued: q ?? { recordings: 0, summaries: 0, asks: 0, vocab: 0 },
-  };
+      (SELECT count(*) FROM recordings WHERE user_id=?1 AND status='queued' AND deleted_at IS NULL) AS recordings,
+      (SELECT count(*) FROM summaries WHERE user_id=?1 AND status='queued') AS summaries,
+      (SELECT count(*) FROM asks WHERE user_id=?1 AND status='queued') AS asks,
+      (SELECT count(*) FROM vocab_scans WHERE user_id=?1 AND status='queued') AS vocab`).bind(uid).first<{ recordings: number; summaries: number; asks: number; vocab: number }>();
+  const list = results.map((r) => ({ ...r, online: r.ago_s < 180, job: r.job ? JSON.parse(r.job) : null }));
+  const runners = !cloud ? list : [{ name: "Kiroku Cloud", last_seen: list[0]?.last_seen ?? null, ago_s: list[0]?.ago_s ?? null,
+    online: list.some((r) => r.online), job: list.find((r) => r.job)?.job ?? null }];
+  return { runners, queued: q ?? { recordings: 0, summaries: 0, asks: 0, vocab: 0 } };
 }
 
 // play.m4a uploads carry the runner in ?runner= (the PUT body is raw audio).
@@ -83,14 +86,14 @@ async function transcriptText(env: Env, rid: number) {
   return results.map((r) => `[${pad(Math.floor(r.ms / 60000))}:${pad(Math.floor(r.ms / 1000) % 60)}] ${r.name}: ${r.text}`).join("\n");
 }
 
-// Ask step 1: one compact line per done recording; speakers = names that have segments, summary = start of the newest one.
-async function askIndex(env: Env) {
+// Ask step 1: one compact line per done recording of the asker; speakers = names that have segments, summary = start of the newest one.
+async function askIndex(env: Env, uid: number) {
   const { results } = await env.DB.prepare(`SELECT r.id, r.title, date(r.created_at, ${TZ}) AS date, r.duration_s,
       (SELECT json_group_array(DISTINCT display_name) FROM speakers
         WHERE recording_id=r.id AND id IN (SELECT speaker_id FROM segments WHERE recording_id=r.id)) AS speakers,
       (SELECT substr(content_md, 1, 300) FROM summaries WHERE recording_id=r.id AND status='done' ORDER BY id DESC LIMIT 1) AS summary
-    FROM recordings r WHERE r.deleted_at IS NULL AND r.status='done' ORDER BY r.created_at DESC, r.id DESC`)
-    .all<{ speakers: string }>();
+    FROM recordings r WHERE r.user_id=? AND r.deleted_at IS NULL AND r.status='done' ORDER BY r.created_at DESC, r.id DESC`)
+    .bind(uid).all<{ speakers: string }>();
   return results.map((r) => ({ ...r, speakers: JSON.parse(r.speakers) }));
 }
 
@@ -98,15 +101,18 @@ async function askIndex(env: Env) {
 async function claimVocab(env: Env, runner: string) {
   const claim = () => env.DB.prepare(`UPDATE vocab_scans SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
     WHERE id=(SELECT id FROM vocab_scans WHERE status='queued' OR (${ACTIVE.vocab_scans} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
-    RETURNING id, from_id, to_id`).bind(runner).first<{ id: number; from_id: number; to_id: number }>();
-  const scan = (await claim()) ?? ((await queueScan(env, false)) ? await claim() : null);
+    RETURNING id, from_id, to_id, user_id`).bind(runner).first<{ id: number; from_id: number; to_id: number; user_id: number }>();
+  let scan = await claim();
+  for (const uid of scan ? [] : await scanCandidates(env)) if (await queueScan(env, uid, false)) { scan = await claim(); break; }
   return scan ? scanJob(env, scan) : null;
 }
 
 async function recording(env: Env, rid: number) {
-  return first<{ filename: string; source_key: string | null; play_key: string | null; upload_id: string | null }>(
-    env.DB.prepare(`SELECT filename, source_key, play_key, upload_id FROM recordings WHERE id=?`).bind(rid));
+  return first<{ filename: string; source_key: string | null; play_key: string | null; upload_id: string | null; user_id: number }>(
+    env.DB.prepare(`SELECT filename, source_key, play_key, upload_id, user_id FROM recordings WHERE id=?`).bind(rid));
 }
+
+const playKey = (rec: { user_id: number }, rid: number) => `u/${rec.user_id}/rec/${rid}/play.m4a`;
 
 export const runnerRoutes: [string, RegExp, Handler][] = [
   ["POST", /^\/api\/runner\/claim$/, async (req, env) => {
@@ -116,10 +122,11 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     // asks first (interactive, short); only runners that declare `asks: true` know the job kind
     const ask = body.asks !== true ? null : await env.DB.prepare(`UPDATE asks SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
       WHERE id=(SELECT id FROM asks WHERE status='queued' OR (${ACTIVE.asks} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
-      RETURNING id, question`).bind(runner).first<{ id: number; question: string }>();
+      RETURNING id, question, user_id`).bind(runner).first<{ id: number; question: string; user_id: number }>();
     if (ask) {
+      const { user_id, ...job } = ask;
       const { today } = (await env.DB.prepare(`SELECT date('now', ${TZ}) AS today`).first<{ today: string }>())!;
-      return { job: { kind: "ask", ...ask, today, index: await askIndex(env) } };
+      return { job: { kind: "ask", ...job, today, index: await askIndex(env, user_id) } };
     }
     // a runner works one job at a time, so a job still leased to this runner is left over from its previous run
     // one UPDATE…RETURNING per table: D1 runs statements serially, so two runners can never get the same row
@@ -129,23 +136,24 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
       WHERE id=(SELECT id FROM recordings WHERE deleted_at IS NULL
         AND ((status='queued' AND (not_before IS NULL OR not_before <= datetime('now')))
           OR (${ACTIVE.recordings} AND (lease_until < datetime('now') OR runner=?1))) ORDER BY id LIMIT 1)
-      RETURNING id, filename, size, source_key, play_key, language`).bind(runner)
-      .first<{ id: number; filename: string; size: number | null; source_key: string | null; play_key: string | null; language: string | null }>();
+      RETURNING id, filename, size, source_key, play_key, language, user_id`).bind(runner)
+      .first<{ id: number; filename: string; size: number | null; source_key: string | null; play_key: string | null; language: string | null; user_id: number }>();
     if (rec) {
       // retranscribe after the source was deleted: the runner gets play.m4a as its source
       const size = rec.source_key ? rec.size : rec.play_key ? ((await env.AUDIO.head(rec.play_key))?.size ?? null) : null;
-      const { stt_lang, cleanup, vocab } = await getSettings(env);
+      const { stt_lang, cleanup, vocab } = await getSettings(env, rec.user_id);
       return { job: { kind: "recording", id: rec.id, filename: rec.filename, source_size: size, language: rec.language ?? stt_lang, settings: { cleanup, vocab } } };
     }
     const sum = await env.DB.prepare(`UPDATE summaries SET status='running', runner=?1, lease_until=${LEASE}, error=NULL
       WHERE id=(SELECT id FROM summaries WHERE status='queued' OR (${ACTIVE.summaries} AND (lease_until < datetime('now') OR runner=?1)) ORDER BY id LIMIT 1)
-      RETURNING id, recording_id, template_id, language`).bind(runner)
-      .first<{ id: number; recording_id: number; template_id: string; language: string }>();
+      RETURNING id, recording_id, template_id, language, user_id`).bind(runner)
+      .first<{ id: number; recording_id: number; template_id: string; language: string; user_id: number }>();
     // vocab scans last (background); only runners that declare `vocab: true` know the kind
     if (!sum) return { job: body.vocab === true ? await claimVocab(env, runner) : null };
-    const { about, content_focus, instructions, me, vocab } = await getSettings(env);
-    const meName = me === null ? null : ((await env.DB.prepare(`SELECT name FROM people WHERE id=?`).bind(me).first<{ name: string }>())?.name ?? null);
-    return { job: { kind: "summary", ...sum, transcript: await transcriptText(env, sum.recording_id),
+    const { user_id, ...job } = sum;
+    const { about, content_focus, instructions, me, vocab } = await getSettings(env, user_id);
+    const meName = me === null ? null : ((await env.DB.prepare(`SELECT name FROM people WHERE id=? AND user_id=?`).bind(me, user_id).first<{ name: string }>())?.name ?? null);
+    return { job: { kind: "summary", ...job, transcript: await transcriptText(env, sum.recording_id),
       settings: { about, content_focus, instructions, me: meName, vocab } } };
   }],
 
@@ -172,7 +180,7 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     await holdQuery(env, id(rid), url);
     const rec = await recording(env, id(rid));
     if (!req.body) throw new HttpError(400, "empty body");
-    const key = `rec/${id(rid)}/play.m4a`;
+    const key = playKey(rec, id(rid));
     if (url.searchParams.has("part")) {
       if (!rec.upload_id) throw new HttpError(409, "no play upload started");
       const p = await env.AUDIO.resumeMultipartUpload(key, rec.upload_id).uploadPart(partNumber(url.searchParams.get("part")), req.body);
@@ -181,12 +189,13 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     if (!req.headers.get("Content-Length")) throw new HttpError(411, "Content-Length required");
     await env.AUDIO.put(key, req.body, { httpMetadata: { contentType: "audio/mp4" } });
     await env.DB.prepare(`UPDATE recordings SET play_key=? WHERE id=?`).bind(key, id(rid)).run();
+    if (rec.play_key && rec.play_key !== key) await env.AUDIO.delete(rec.play_key); // pre-0011 key layout
     return { ok: true };
   }],
 
   ["POST", /^\/api\/runner\/recordings\/(\d+)\/play\/start$/, async (_req, env, [rid], url) => {
     await holdQuery(env, id(rid), url);
-    const up = await env.AUDIO.createMultipartUpload(`rec/${id(rid)}/play.m4a`, { httpMetadata: { contentType: "audio/mp4" } });
+    const up = await env.AUDIO.createMultipartUpload(playKey(await recording(env, id(rid)), id(rid)), { httpMetadata: { contentType: "audio/mp4" } });
     await env.DB.prepare(`UPDATE recordings SET upload_id=? WHERE id=?`).bind(up.uploadId, id(rid)).run();
     return { ok: true };
   }],
@@ -196,9 +205,10 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     await holdQuery(env, id(rid), url);
     const rec = await recording(env, id(rid));
     if (!rec.upload_id) throw new HttpError(409, "no play upload started");
-    const key = `rec/${id(rid)}/play.m4a`;
+    const key = playKey(rec, id(rid));
     await env.AUDIO.resumeMultipartUpload(key, rec.upload_id).complete(parts);
     await env.DB.prepare(`UPDATE recordings SET play_key=?, upload_id=NULL WHERE id=?`).bind(key, id(rid)).run();
+    if (rec.play_key && rec.play_key !== key) await env.AUDIO.delete(rec.play_key); // pre-0011 key layout
     return { ok: true };
   }],
 
@@ -213,25 +223,26 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     if (!Array.isArray(segments) || !segments.every((s) => Number.isFinite(s?.start_ms) && Number.isFinite(s?.end_ms) && typeof s?.text_raw === "string"))
       throw new HttpError(400, "segments: [{start_ms, end_ms, speaker, text_raw}] required");
     await hold(env, "recordings", rid, runnerName(body));
+    const { user_id: uid } = await recording(env, rid);
     const db = env.DB;
     // one batch = one transaction; segments go in as JSON chunks, speaker index → id via the speakers just inserted
     const results = await db.batch([
       db.prepare(`DELETE FROM segments WHERE recording_id=?`).bind(rid),
       db.prepare(`DELETE FROM speakers WHERE recording_id=?`).bind(rid),
       db.prepare(`UPDATE recordings SET duration_s=? WHERE id=?`).bind(typeof body.duration_s === "number" ? body.duration_s : null, rid),
-      db.prepare(`INSERT INTO speakers(recording_id, label, display_name, embedding, emb_model)
-        SELECT ?1, value->>'label', value->>'display_name', nullif(value->'embedding', 'null'), value->>'emb_model' FROM json_each(?2) ORDER BY key`)
+      db.prepare(`INSERT INTO speakers(recording_id, label, display_name, embedding, emb_model, user_id)
+        SELECT ?1, value->>'label', value->>'display_name', nullif(value->'embedding', 'null'), value->>'emb_model', ?3 FROM json_each(?2) ORDER BY key`)
         .bind(rid, JSON.stringify(speakers.map((s) => ({ label: s.label, display_name: s.display_name,
-          embedding: s.embedding ?? null, emb_model: s.embedding == null ? null : s.emb_model ?? LEGACY_MODEL })))),
+          embedding: s.embedding ?? null, emb_model: s.embedding == null ? null : s.emb_model ?? LEGACY_MODEL }))), uid),
       ...chunks(segments.map((s) => [Math.round(s.start_ms), Math.round(s.end_ms), Number.isInteger(s.speaker) ? s.speaker : null, s.text_raw])).map((c) =>
         db.prepare(`WITH sp AS (SELECT id, row_number() OVER (ORDER BY id) - 1 AS idx FROM speakers WHERE recording_id=?1)
-          INSERT INTO segments(recording_id, start_ms, end_ms, speaker_id, text_raw)
-          SELECT ?1, value->>0, value->>1, (SELECT id FROM sp WHERE idx = value->>2), value->>3 FROM json_each(?2) ORDER BY key
-          RETURNING id`).bind(rid, JSON.stringify(c))),
+          INSERT INTO segments(recording_id, start_ms, end_ms, speaker_id, text_raw, user_id)
+          SELECT ?1, value->>0, value->>1, (SELECT id FROM sp WHERE idx = value->>2), value->>3, ?3 FROM json_each(?2) ORDER BY key
+          RETURNING id`).bind(rid, JSON.stringify(c), uid)),
     ]);
     // AUTOINCREMENT ids ascend in insertion order, which is input order
     const ids = results.slice(4).flatMap((r) => (r.results as { id: number }[]).map((x) => x.id)).sort((a, b) => a - b);
-    await rematch(env, rid);
+    await rematch(env, uid, rid);
     return { segment_ids: ids };
   }],
 
@@ -242,7 +253,7 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const items = body.speakers;
     if (!Array.isArray(items) || !items.every((s) => Number.isInteger(s?.id) && isEmbedding(s.embedding) && isEmbModel(s.emb_model)))
       throw new HttpError(400, "speakers: [{id, embedding: number[≤1024], emb_model?: string}] required");
-    await recording(env, rid);
+    const { user_id: uid } = await recording(env, rid);
     const db = env.DB;
     // never replace a VOICE_MODEL embedding with another model's (an old runner's backfill)
     const stored = items.length ? (await db.batch(items.map((s) =>
@@ -252,8 +263,8 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const { results } = await db.prepare(`SELECT id, display_name FROM speakers WHERE recording_id=? AND auto=0 AND label<>'custom' AND embedding IS NOT NULL`)
       .bind(rid).all<{ id: number; display_name: string }>();
     const named = results.filter((s) => !isDefaultName(s.display_name));
-    if (named.length) await db.batch(named.flatMap((s) => enrol(db, s.id, s.display_name, true)));
-    return { stored, enrolled: named.length, relabelled: await rematch(env) };
+    if (named.length) await db.batch(named.flatMap((s) => enrol(db, uid, s.id, s.display_name, true)));
+    return { stored, enrolled: named.length, relabelled: await rematch(env, uid) };
   }],
 
   ["POST", /^\/api\/runner\/recordings\/(\d+)\/clean$/, async (req, env, [rs]) => {
@@ -333,8 +344,10 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean).map(Number);
     if (!ids.length || ids.length > 20 || !ids.every(Number.isInteger)) throw new HttpError(400, "ids: 1-20 comma-separated recording ids");
     await hold(env, "asks", id(aid), runnerName({ runner: url.searchParams.get("runner") }));
+    // only the asker's recordings
     const { results } = await env.DB.prepare(`SELECT id, title, date(created_at, ${TZ}) AS date FROM recordings
-      WHERE id IN (SELECT value FROM json_each(?)) AND deleted_at IS NULL AND status='done'`).bind(JSON.stringify(ids))
+      WHERE id IN (SELECT value FROM json_each(?1)) AND user_id=(SELECT user_id FROM asks WHERE id=?2) AND deleted_at IS NULL AND status='done'`)
+      .bind(JSON.stringify(ids), id(aid))
       .all<{ id: number; title: string; date: string }>();
     const byId = new Map(results.map((r) => [r.id, r]));
     const rows = ids.flatMap((i) => byId.get(i) ?? []);
@@ -358,7 +371,8 @@ export const runnerRoutes: [string, RegExp, Handler][] = [
     const body = await readJSON<{ runner?: unknown; terms?: unknown }>(req);
     const terms = parseTerms(body.terms);
     await hold(env, "vocab_scans", id(vid), runnerName(body));
-    const r = await env.DB.batch([...saveTerms(env, terms), env.DB.prepare(`UPDATE vocab_scans SET status='done', error=NULL, lease_until=NULL
+    const { user_id } = await first<{ user_id: number }>(env.DB.prepare(`SELECT user_id FROM vocab_scans WHERE id=?`).bind(id(vid)));
+    const r = await env.DB.batch([...saveTerms(env, user_id, terms), env.DB.prepare(`UPDATE vocab_scans SET status='done', error=NULL, lease_until=NULL
       WHERE id=?1 AND runner=?2 AND ${ACTIVE.vocab_scans}`).bind(id(vid), runnerName(body))]);
     if (!r.at(-1)!.meta.changes) throw new HttpError(409, "lease lost");
     return { ok: true };

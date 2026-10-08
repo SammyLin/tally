@@ -308,9 +308,9 @@ struct SettingsView: View {
     @ViewBuilder private var backendSections: some View {
         Section("後端") {
             LabeledContent("網址", value: app.baseURL?.absoluteString ?? "—")
-            LabeledContent("登入", value: app.token != nil ? "Cloudflare Access" : (app.extraHeaders.isEmpty ? "不需要登入" : "Service token（測試）"))
+            LabeledContent("登入", value: app.cloud ? "Kiroku Cloud" : app.token != nil ? "Cloudflare Access" : (app.extraHeaders.isEmpty ? "不需要登入" : "Service token（測試）"))
             Button("變更後端…") { confirmChange = true }
-            if app.token != nil {
+            if app.token != nil || app.cloud {
                 Button("登出", role: .destructive) { Task { await app.logout(); dismiss() } }
             }
         }

@@ -73,11 +73,11 @@ async function send(env: Env & Vapid, sub: Sub, payload: Uint8Array) {
   else if (!r.ok) throw new Error(`${r.status} ${text.slice(0, 200)}`);
 }
 
-// Sends to every subscription in parallel; never throws (a push failure must never fail the request that triggered it).
-export async function notify(env: Env, msg: Msg) {
+// Sends to every subscription of user `uid` in parallel; never throws (a push failure must never fail the request that triggered it).
+export async function notify(env: Env, uid: number, msg: Msg) {
   try {
     if (!pushEnabled(env)) return;
-    const { results } = await env.DB.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions`).all<Sub>();
+    const { results } = await env.DB.prepare(`SELECT endpoint, p256dh, auth FROM push_subscriptions WHERE user_id=?`).bind(uid).all<Sub>();
     const payload = te.encode(JSON.stringify({ ...msg, title: msg.title.slice(0, 100), body: msg.body.slice(0, 300) }));
     const out = await Promise.allSettled(results.map((s) => send(env, s, payload)));
     out.forEach((o, i) => o.status === "rejected" && console.error("push", new URL(results[i].endpoint).host, String(o.reason)));
@@ -86,19 +86,19 @@ export async function notify(env: Env, msg: Msg) {
   }
 }
 
-// A finished/failed job → notification titled with its recording; clicking opens the recording (summary tab for summaries).
+// A finished/failed job → notification to the job's owner titled with its recording; clicking opens the recording (summary tab for summaries).
 export async function notifyJob(env: Env, kind: "recordings" | "summaries" | "asks", jid: number, body: string) {
   try {
     if (!pushEnabled(env)) return;
     if (kind === "asks") {
-      const a = await env.DB.prepare(`SELECT question FROM asks WHERE id=?`).bind(jid).first<{ question: string }>();
-      if (a) await notify(env, { title: a.question.slice(0, 60), body, url: `/#/ask/${jid}`, tag: `ask-${jid}` });
+      const a = await env.DB.prepare(`SELECT question, user_id FROM asks WHERE id=?`).bind(jid).first<{ question: string; user_id: number }>();
+      if (a) await notify(env, a.user_id, { title: a.question.slice(0, 60), body, url: `/#/ask/${jid}`, tag: `ask-${jid}` });
       return;
     }
     const rec = await env.DB.prepare(kind === "summaries"
-      ? `SELECT r.id, r.title FROM summaries s JOIN recordings r ON r.id=s.recording_id WHERE s.id=?`
-      : `SELECT id, title FROM recordings WHERE id=?`).bind(jid).first<{ id: number; title: string }>();
-    if (rec) await notify(env, { title: rec.title || "Tally", body, url: `/#/rec/${rec.id}${kind === "summaries" ? "/summary" : ""}`, tag: `rec-${rec.id}` });
+      ? `SELECT r.id, r.title, r.user_id FROM summaries s JOIN recordings r ON r.id=s.recording_id WHERE s.id=?`
+      : `SELECT id, title, user_id FROM recordings WHERE id=?`).bind(jid).first<{ id: number; title: string; user_id: number }>();
+    if (rec) await notify(env, rec.user_id, { title: rec.title || "Tally", body, url: `/#/rec/${rec.id}${kind === "summaries" ? "/summary" : ""}`, tag: `rec-${rec.id}` });
   } catch (e) {
     console.error("push", e);
   }

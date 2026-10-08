@@ -1,3 +1,5 @@
+import ClerkKit
+import ClerkKitUI
 import SwiftUI
 
 @main
@@ -29,11 +31,23 @@ struct ConnectView: View {
     @State private var busy = false
     @State private var message: String?
     @State private var loginURL: URL?
+    @State private var cloudSignIn = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Group {
+                    Section {
+                        Button(action: connectCloud) {
+                            Label("Kiroku Cloud", systemImage: "cloud")
+                        }
+                        .accessibilityIdentifier("connect.cloud")
+                        .disabled(busy)
+                    } header: {
+                        KirokuMark(height: 44)
+                    } footer: {
+                        Text("用 Kiroku 帳號登入，由我們代管處理。")
+                    }
                     Section {
                         TextField("https://records.example.com", text: $address)
                             .keyboardType(.URL)
@@ -43,12 +57,9 @@ struct ConnectView: View {
                             .onSubmit(connect)
                             .accessibilityIdentifier("connect.url")
                     } header: {
-                        VStack(alignment: .leading, spacing: 20) {
-                            KirokuMark(height: 44)
-                            Text("後端網址")
-                        }
+                        Text("自架後端網址")
                     } footer: {
-                        Text("你的 Kiroku 伺服器網址（Kiroku Cloud 或自架）。若有 Cloudflare Access 保護，下一步會請你登入。")
+                        Text("你自己的 Kiroku 伺服器網址。若有 Cloudflare Access 保護，下一步會請你登入。")
                     }
                     if let message {
                         Section { Text(message).foregroundStyle(Color(.danger)).accessibilityIdentifier("connect.error") }
@@ -77,6 +88,23 @@ struct ConnectView: View {
                     loginURL = nil
                 }
                 .interactiveDismissDisabled()
+            }
+            .sheet(isPresented: $cloudSignIn) {
+                CloudSignIn { cloudSignIn = false; app.cloudSignedIn() } onCancel: { cloudSignIn = false }
+                    .interactiveDismissDisabled()
+            }
+        }
+    }
+
+    private func connectCloud() {
+        busy = true
+        message = nil
+        Task {
+            defer { busy = false }
+            do {
+                if try await app.prepareCloud() { app.cloudSignedIn() } else { cloudSignIn = true }
+            } catch {
+                message = "無法連線到 Kiroku Cloud：\(error.localizedDescription)"
             }
         }
     }
@@ -110,6 +138,21 @@ struct ConnectView: View {
     }
 }
 
+/// Kiroku Cloud sign-in: Clerk's prebuilt AuthView (email code; Apple / Google if enabled on the Clerk instance).
+struct CloudSignIn: View {
+    let onDone: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        AuthView(isDismissible: false, onAuthComplete: onDone)
+            .environment(Clerk.shared)
+            .safeAreaInset(edge: .top) {
+                HStack { Button("取消", action: onCancel).accessibilityIdentifier("cloud.cancel"); Spacer() }
+                    .padding(.horizontal)
+            }
+    }
+}
+
 extension URL: @retroactive Identifiable { public var id: String { absoluteString } }
 
 struct RunnersView: View {
@@ -136,7 +179,7 @@ struct RunnersView: View {
                             let latest = Self.latestBuild(runners)
                             ForEach(runners, id: \.name) { r in
                                 // only an offline runner can be removed; it comes back by itself if it connects again
-                                RunnerRow(runner: r, latest: latest, onRemove: r.online ? nil : { Task { await remove(r) } })
+                                RunnerRow(runner: r, latest: latest, onRemove: r.online || app.cloud ? nil : { Task { await remove(r) } })
                             }
                         } else if let error {
                             Text(error).foregroundStyle(Color(.danger))

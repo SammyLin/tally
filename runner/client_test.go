@@ -28,7 +28,7 @@ func newFakeAPI(t *testing.T, respond func(call string, w http.ResponseWriter) b
 	f := &fakeAPI{bodies: map[string][]any{}, respond: respond}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	c := newClient(Config{APIBase: srv.URL + "/", AccessClientID: "cid", AccessClientSecret: "sec", RunnerName: "mac1"})
+	c := newClient(Config{APIBase: srv.URL + "/", AccessClientID: "cid", AccessClientSecret: "sec", RunnerToken: "rt", RunnerName: "mac1"})
 	c.backoff = time.Millisecond
 	return f, c
 }
@@ -43,7 +43,7 @@ func (f *fakeAPI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		f.bodies[call] = append(f.bodies[call], v)
 	}
 	f.mu.Unlock()
-	if r.Header.Get("CF-Access-Client-Id") != "cid" || r.Header.Get("CF-Access-Client-Secret") != "sec" {
+	if r.Header.Get("CF-Access-Client-Id") != "cid" || r.Header.Get("CF-Access-Client-Secret") != "sec" || r.Header.Get("Authorization") != "Bearer rt" {
 		http.Error(w, "no token", http.StatusForbidden)
 		return
 	}
@@ -135,7 +135,7 @@ func TestRunClaimsSummaries(t *testing.T) {
 		}
 		return true
 	})
-	cfg.APIBase, cfg.RunnerName, cfg.AccessClientID, cfg.AccessClientSecret = c.base, c.runner, c.id, c.secret
+	cfg.APIBase, cfg.RunnerName, cfg.AccessClientID, cfg.AccessClientSecret, cfg.RunnerToken = c.base, c.runner, c.id, c.secret, c.token
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error)
 	go func() { done <- run(ctx, cfg) }()

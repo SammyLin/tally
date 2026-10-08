@@ -306,3 +306,9 @@ nonisolated struct Backend: Sendable {
 
 /// For endpoints whose result we ignore ({ok:true} etc.).
 nonisolated struct Ignored: Decodable, Sendable { init(from decoder: Decoder) throws {} }
+
+/// GET /api/config (public): which login the backend wants.
+nonisolated struct ServerConfig: Decodable, Sendable {
+    var authMode: String?
+    var clerkPublishableKey: String?
+}

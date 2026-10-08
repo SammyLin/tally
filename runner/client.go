@@ -27,9 +27,10 @@ func (e *httpError) Is(target error) bool {
 	return target == errLeaseLost && e.Status == http.StatusConflict
 }
 
-// client talks to the Worker API behind Cloudflare Access (service-token headers).
+// client talks to the Worker API behind Cloudflare Access (service-token headers) and/or with a runner token (Kiroku Cloud).
 type client struct {
 	base, id, secret, runner string
+	token                    string // Kiroku Cloud runner token (Authorization: Bearer); empty for self-host
 	hc                       *http.Client
 	attempts                 int
 	backoff                  time.Duration // first retry delay, doubled per attempt
@@ -37,7 +38,7 @@ type client struct {
 
 func newClient(cfg Config) *client {
 	return &client{
-		base: strings.TrimSuffix(cfg.APIBase, "/"), id: cfg.AccessClientID, secret: cfg.AccessClientSecret, runner: cfg.RunnerName,
+		base: strings.TrimSuffix(cfg.APIBase, "/"), id: cfg.AccessClientID, secret: cfg.AccessClientSecret, runner: cfg.RunnerName, token: cfg.RunnerToken,
 		// Access answers a bad token with a redirect to its login page; surface that as an error instead of following it.
 		hc:       &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		attempts: 6,
@@ -76,6 +77,9 @@ func (c *client) once(ctx context.Context, method, path string, body []byte, cty
 	if c.id != "" {
 		req.Header.Set("CF-Access-Client-Id", c.id)
 		req.Header.Set("CF-Access-Client-Secret", c.secret)
+	}
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
 	}
 	resp, err := c.hc.Do(req)
 	if err != nil {

@@ -101,7 +101,9 @@ struct LibraryView: View {
                 RecordView(folders: folders, defaultFolder: folderID, defaultLanguage: app.sttLang)
             }
             .fullScreenCover(isPresented: loginBinding) {
-                if let url = app.baseURL {
+                if app.cloud {
+                    CloudSignIn { app.cloudSignedIn() } onCancel: { Task { await app.changeBackend() } }
+                } else if let url = app.baseURL {
                     LoginView(url: url) { jwt in app.loggedIn(token: jwt, for: url) } onCancel: {
                         Task { await app.changeBackend() }
                     }

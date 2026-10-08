@@ -13,6 +13,10 @@ settings:
     CODE_SIGN_STYLE: Automatic
     CURRENT_PROJECT_VERSION: 1 # app and extension must match
     MARKETING_VERSION: "1.0"
+packages:
+  Clerk: # Kiroku Cloud sign-in
+    url: https://github.com/clerk/clerk-ios
+    exactVersion: 1.6.1
 targets:
   Tally:
     type: application
@@ -20,6 +24,10 @@ targets:
     sources: [Tally, Shared]
     dependencies:
       - target: KirokuShare
+      - package: Clerk
+        product: ClerkKit
+      - package: Clerk
+        product: ClerkKitUI
     entitlements: # App Group: the share extension hands files over through it (see Shared/Inbox.swift)
       path: Tally/Tally.entitlements
       properties:

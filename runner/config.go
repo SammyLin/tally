@@ -25,6 +25,7 @@ type Config struct {
 	APIBase            string // Worker origin
 	AccessClientID     string // Cloudflare Access service token
 	AccessClientSecret string
+	RunnerToken        string // Kiroku Cloud: sent as Authorization: Bearer
 	RunnerName         string
 }
 
@@ -47,6 +48,7 @@ func loadConfig() Config {
 		APIBase:            cmp.Or(os.Getenv("API_BASE"), "https://records.3mi.ai"),
 		AccessClientID:     os.Getenv("CF_ACCESS_CLIENT_ID"),
 		AccessClientSecret: os.Getenv("CF_ACCESS_CLIENT_SECRET"),
+		RunnerToken:        os.Getenv("RUNNER_TOKEN"),
 		RunnerName:         cmp.Or(os.Getenv("RUNNER_NAME"), host),
 	}
 }

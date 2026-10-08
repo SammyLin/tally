@@ -12,7 +12,7 @@ extension View {
     func kirokuRows() -> some View { listRowBackground(Color(.surface)) }
 }
 
-/// The logo mark (sound wave → written lines), decorative next to visible text, or labelled when alone.
+/// The logo mark (sound wave flowing into 言), decorative next to visible text, or labelled when alone.
 struct KirokuMark: View {
     var height: CGFloat = 20
 

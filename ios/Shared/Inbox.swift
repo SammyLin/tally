@@ -83,7 +83,7 @@ nonisolated enum Inbox {
             guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
             let sidecar = (try? Data(contentsOf: entry.appending(path: sidecarName))).flatMap { try? decoder.decode(Sidecar.self, from: $0) }
             let files = ((try? fm.contentsOfDirectory(at: entry, includingPropertiesForKeys: nil)) ?? [])
-                .filter { $0.lastPathComponent != sidecarName && !$0.lastPathComponent.hasPrefix(".") }
+                .filter { $0.lastPathComponent != sidecarName } // a shared ".take1.m4a" is a real file, not a hidden one
             var ok = true
             for f in files {
                 let dir = imports.appending(path: entry.lastPathComponent, directoryHint: .isDirectory)

@@ -73,7 +73,8 @@ targets:
             NSExtensionActivationRule: >-
               SUBQUERY(extensionItems, $item, SUBQUERY($item.attachments, $a,
               ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.audio" OR
-              ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.movie").@count > 0).@count > 0
+              ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.movie" OR
+              ANY $a.registeredTypeIdentifiers UTI-CONFORMS-TO "public.audiovisual-content").@count > 0).@count > 0
   TallyTests:
     type: bundle.unit-test
     platform: iOS

@@ -10,6 +10,7 @@ final class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        isModalInPresentation = true // swipe-down would skip 取消's cleanup of the staged copies
         model.finish = { [weak self] cancelled in
             guard let ctx = self?.extensionContext else { return }
             if cancelled { ctx.cancelRequest(withError: CocoaError(.userCancelled)) } else { ctx.completeRequest(returningItems: nil) }
@@ -56,26 +57,27 @@ nonisolated struct StagedFile: Identifiable, Sendable {
         for p in media.prefix(Self.maxItems) {
             do { files.append(try await Self.stage(p, in: inbox)) } catch { self.error = "無法讀取檔案：\(error.localizedDescription)" }
         }
-        if files.count == 1 { title = (files[0].name as NSString).deletingPathExtension }
+        if files.count == 1, title.isEmpty { title = (files[0].name as NSString).deletingPathExtension } // keep what was typed while loading
         if files.isEmpty, error == nil { error = "沒有可儲存的音訊或影片檔。" }
     }
 
     func save() {
-        let now = Date.now
+        let now = Date.now, single = files.count == 1 // before the loop: committed files leave `files`
         do {
             for f in files {
-                let meta = Inbox.Sidecar(title: files.count == 1 ? title : (f.name as NSString).deletingPathExtension,
+                let meta = Inbox.Sidecar(title: single ? title : (f.name as NSString).deletingPathExtension,
                                          folderId: folderId, language: language, createdAt: now)
                 try Inbox.encoder.encode(meta).write(to: f.dir.appending(path: Inbox.sidecarName), options: .atomic)
                 let done = f.dir.deletingLastPathComponent().appending(path: String(f.dir.lastPathComponent.dropFirst(Inbox.tmpPrefix.count)))
                 try FileManager.default.moveItem(at: f.dir, to: done)
+                files.removeAll { $0.id == f.id } // committed: a retry after a later failure must not touch it again
             }
         } catch {
             self.error = "儲存失敗：\(error.localizedDescription)"
             return
         }
-        files = []
         saved = true
+        AccessibilityNotification.Announcement("已存到 Kiroku，開啟 App 後會上傳").post()
         Task {
             try? await Task.sleep(for: .seconds(1))
             finish(false)
@@ -151,7 +153,7 @@ struct ShareView: View {
                     ForEach(model.files) { f in
                         LabeledContent(f.name, value: ByteCountFormatter.string(fromByteCount: f.size, countStyle: .file))
                     }
-                    if model.loading { ProgressView() }
+                    if model.loading { ProgressView("讀取中…") }
                 } footer: {
                     if model.skipped > 0 { Text("略過 \(model.skipped) 個項目（只收音訊／影片，最多 \(ShareModel.maxItems) 個）。") }
                 }

@@ -79,6 +79,14 @@ struct InboxTests {
         #expect(!exists(tmp))
     }
 
+    @Test func dotNamedFileIsQueuedNotDeleted() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        try entry("A", file: ".take1.m4a", sidecar: nil)
+        let q = adopt()
+        #expect(q.map(\.name) == [".take1.m4a"])
+        #expect(exists(imports.appending(path: "A/.take1.m4a")))
+    }
+
     @Test func blankTitleKeepsOriginalName() {
         #expect(Inbox.filename(for: "New Recording 3.m4a", title: "  ") == "New Recording 3.m4a")
         #expect(Inbox.filename(for: "clip.mov", title: "訪談") == "訪談.mov")

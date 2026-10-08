@@ -58,6 +58,7 @@ struct LibraryView: View {
             .task { await app.loadSettings() }
             .task {
                 while !Task.isCancelled { // header runner status (web: every 15 s)
+                    app.uploads.adoptInbox() // shares made while Kiroku stays active (iPad Split View) don't trigger scenePhase
                     await app.loadRunners()
                     try? await Task.sleep(for: .seconds(15))
                 }

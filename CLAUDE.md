@@ -5,6 +5,7 @@ Tally — self-hosted AI voice notes (renamed from noteapp; D1 `noteapp` / R2 `n
 Layout:
 - `web/` — Cloudflare Worker (TypeScript): API, UI (`public/index.html`), D1 migrations. Data lives in D1 + R2, behind Cloudflare Access.
 - `runner/` — Go, runs on the Mac: pulls jobs from the Worker, runs ffmpeg / whisper-cli / sherpa-onnx diarization / ACP (local Claude), pushes results back. Config in `runner/.env` (see `.env.example`).
+- `ios/` — SwiftUI iPhone app (record, upload queue, playback, copy as prompt). `xcodegen` generates `Tally.xcodeproj` from `project.yml`; Maestro UI flows are in `ios/maestro`. See `ios/README.md` (build, tests, TestFlight, Access login).
 
 Runner (run from `runner/`):
 - Run: `go run .` (= `run`: claim jobs from `API_BASE`, default https://records.3mi.ai). Batch upload: `go run . ingest <folder>`. Models: `go run . models`.

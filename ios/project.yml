@@ -1,0 +1,59 @@
+name: Tally
+options:
+  bundleIdPrefix: ai.3mi
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    DEVELOPMENT_TEAM: BXJJV5UT4H # "Apple Development: corn2277@gmail.com"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Tally:
+    type: application
+    platform: iOS
+    sources: [Tally]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.3mi.tally
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        CURRENT_PROJECT_VERSION: 1
+        MARKETING_VERSION: "1.0"
+    info:
+      path: Tally/Info.plist
+      properties:
+        CFBundleDisplayName: Tally
+        CFBundleDevelopmentRegion: zh-Hant
+        NSMicrophoneUsageDescription: Tally 需要使用麥克風來錄音。
+        UIBackgroundModes: [audio]
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+        # self-hosted backends: allow plain http to *.local / LAN dev servers (wrangler dev with DEV_NO_AUTH)
+        NSAppTransportSecurity: {NSAllowsLocalNetworking: true}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+  TallyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [TallyTests]
+    dependencies:
+      - target: Tally
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ai.3mi.tally.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Tally.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Tally"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+schemes:
+  Tally:
+    build:
+      targets:
+        Tally: all
+        TallyTests: [test]
+    test:
+      targets: [TallyTests]

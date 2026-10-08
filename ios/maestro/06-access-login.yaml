@@ -1,0 +1,26 @@
+# Production behind Cloudflare Access (read-only): connecting opens the login sheet on 3mi.cloudflareaccess.com.
+# Does not log in; cancels and leaves the app on the connect screen.
+appId: ai.3mi.tally
+env:
+  ACCESS_BACKEND: ${ACCESS_BACKEND || 'https://records.3mi.ai'}
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- tapOn:
+    id: connect.url
+- eraseText: 60
+- inputText: ${ACCESS_BACKEND}
+- tapOn:
+    id: connect.submit
+- extendedWaitUntil:
+    visible: "登入 records.3mi.ai"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: login.host
+      text: ".*3mi\\.cloudflareaccess\\.com"
+    timeout: 30000
+- takeScreenshot: ${SHOTS || '/tmp'}/m06-access
+- tapOn: 取消
+- assertVisible: 連線到你的 Tally

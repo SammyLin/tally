@@ -1,0 +1,22 @@
+# Fresh install → 「連線到你的 Tally」 → local backend without Access → library shows the seeded recording.
+appId: ai.3mi.tally
+env:
+  BACKEND: ${BACKEND || 'http://127.0.0.1:8795'}
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      microphone: allow
+- assertVisible: 連線到你的 Tally
+- tapOn:
+    id: connect.url
+- eraseText: 60
+- inputText: ${BACKEND}
+- tapOn:
+    id: connect.submit
+- extendedWaitUntil:
+    visible: 會議測試
+    timeout: 20000
+- assertVisible: 最近
+- takeScreenshot: ${SHOTS || '/tmp'}/m01-library

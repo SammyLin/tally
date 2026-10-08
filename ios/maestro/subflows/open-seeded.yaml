@@ -1,0 +1,13 @@
+# Launch (keeping state) and open the seeded, processed recording 「會議測試」.
+appId: ai.3mi.tally
+---
+- launchApp:
+    stopApp: true
+- extendedWaitUntil:
+    visible: 會議測試
+    timeout: 20000
+- tapOn: 會議測試
+- extendedWaitUntil:
+    visible:
+      id: segment.2.text
+    timeout: 20000

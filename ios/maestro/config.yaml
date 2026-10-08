@@ -1,0 +1,12 @@
+# maestro test ios/maestro  (backend: -e BACKEND=http://127.0.0.1:8795, see README.md)
+flows:
+  - "*"
+executionOrder:
+  continueOnFailure: false
+  flowsOrder:
+    - 01-connect
+    - 02-record-upload
+    - 03-detail-seek
+    - 04-rename-speaker
+    - 05-copy-prompt
+    - 06-access-login

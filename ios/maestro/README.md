@@ -11,7 +11,8 @@ Prerequisites:
    failed one); and `PARITY=1 STATE=<dir>` last (12: a Markdown summary on 「會議測試」, a queued 「排隊測試」, runners marked offline).
    Flows 07–12 change their data (purge, merge, delete person, remove runner), so a second full run needs a fresh database
    (new `--persist-to` dir + `seed-all.sh`).
-3. Debug build installed: `xcodebuild -scheme Tally -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath build` and
+3. For flow 13, an audio file in the simulator's Files app (我的 iPhone): `ios/maestro/seed-files.sh clip.mp3 [udid]` (saved as 「分享測試.mp3」).
+4. Debug build installed: `xcodebuild -scheme Tally -destination 'platform=iOS Simulator,name=iPhone 17' -derivedDataPath build` and
    `xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/Tally.app`.
 
 Flows: 01 connect · 02 record + upload (language English, checked via the API) · 03 seek · 04 rename speaker · 05 copy as prompt ·
@@ -21,7 +22,9 @@ delete summary, folder name on list rows) · 09 retranscribe with language, tras
 vocabulary + suggestion, 我是誰, person rename → merge, unsaved-changes guard, a > 50-character word blocks 儲存, save checked via the API, 「（我）」, delete person).
 12 parity (runner header 「沒有 runner 在線」「排隊 1」, no-runner notice, tally:// links to the summary tab / trash / 問問看,
 Markdown table / list / quote / code and summary date, 1.75×, speaker bands, transcript range → 「複製這段為 Prompt」,
-removing an offline runner). `subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
+removing an offline runner). 13 share extension (Files → 分享測試 → 分享 → Kiroku; folder 客戶B, 日本語, title 「分享的錄音」 → 儲存;
+Kiroku adopts the inbox entry and uploads it, checked via the API). It taps 儲存 by position: once the keyboard has been up,
+Maestro can't see the extension's elements. `subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
 `scripts/recording-field.js` reads a recording field from the backend for `assertTrue`.
 
 Options: `-e BACKEND=http://…` (default `http://127.0.0.1:8795`), `-e SHOTS=<dir>` for screenshots (default /tmp), `-e ACCESS_BACKEND=…`

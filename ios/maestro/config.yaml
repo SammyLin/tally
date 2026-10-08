@@ -15,4 +15,5 @@ executionOrder:
     - 10-ask
     - 11-settings
     - 12-parity
+    - 13-share-extension
     - 06-access-login

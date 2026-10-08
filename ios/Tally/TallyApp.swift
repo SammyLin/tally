@@ -15,8 +15,8 @@ struct TallyApp: App {
             }
             .modifier(ToastOverlay())
             .environment(app)
-            .task { app.uploads.kick() } // also adopts recordings left over from a killed session
-            .onChange(of: scenePhase) { _, phase in if phase == .active { app.uploads.kick() } }
+            .task { app.uploads.adoptInbox(); app.uploads.kick() } // also adopts recordings left over from a killed session
+            .onChange(of: scenePhase) { _, phase in if phase == .active { app.uploads.adoptInbox(); app.uploads.kick() } }
             .onOpenURL { url in if let l = DeepLink(url) { app.link = l } } // tally:// links (web: hash routes)
         }
     }

@@ -150,11 +150,6 @@ nonisolated struct Ask: Codable, Identifiable, Hashable, Sendable {
     static let statusLabels = ["queued": "排隊中", "running": "思考中", "done": "完成", "error": "錯誤"]
 }
 
-/// Transcription languages (web: LANGS); POST /api/uploads and retranscribe take the id.
-nonisolated enum STTLang {
-    static let all: [(id: String, name: String)] = [("zh", "中文"), ("en", "English"), ("ja", "日本語"), ("auto", "自動偵測")]
-}
-
 nonisolated struct Named: Codable, Hashable, Sendable { var id: String; var name: String }
 nonisolated struct Templates: Codable, Sendable { var templates: [Named]; var languages: [Named] }
 

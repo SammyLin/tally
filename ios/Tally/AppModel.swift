@@ -18,7 +18,7 @@ import WebKit
     /// App-wide toast (web: toast()); shown over every screen so it survives popping back to the list.
     var toast: String?
     /// Server settings (web: SET); sttLang is the default for record / import / retranscribe, `me` marks 「（我）」.
-    var settings = AppSettings()
+    var settings = AppSettings() { didSet { Inbox.defaultLanguage = settings.sttLang } } // for the share extension's picker
     var sttLang: String { settings.sttLang }
     /// GET /api/runners, refreshed every 15 s by the library (web: S.runners).
     var runners: Runners?

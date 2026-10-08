@@ -192,6 +192,7 @@ struct LibraryView: View {
             async let list: [Recording] = app.get("api/recordings", query: q)
             async let fs: [Folder] = app.get("api/folders")
             (recordings, folders) = try await (list, fs)
+            Inbox.cache(folders: FolderTree.flatten(folders).map { .init(id: $0.folder.id, name: $0.folder.name, depth: $0.depth) })
             error = nil
             if case .folder(let id) = scope, !folders.contains(where: { $0.id == id }) { scope = .unfiled } // deleted elsewhere
         } catch is CancellationError {

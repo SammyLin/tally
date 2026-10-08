@@ -99,6 +99,15 @@ nonisolated enum Parts {
         return dst
     }
 
+    /// Files saved from the share sheet (「存到 Kiroku」) wait in the App Group inbox; queue them with their
+    /// title / folder / language. Called at launch and whenever the app becomes active.
+    func adoptInbox() {
+        guard let inbox = Inbox.directory else { return }
+        Inbox.adopt(from: inbox, to: URL.documentsDirectory.appending(path: "Imports", directoryHint: .isDirectory)) { file, name, folder, lang in
+            enqueue(file: file, filename: name, folderId: folder, language: lang)
+        }
+    }
+
     /// The backend changed: ids, part sizes, etags and folders belong to the old one, so every item starts over
     /// on the new one. (Nothing is sent to the new backend: those ids mean other recordings there.)
     func resetServerState() {

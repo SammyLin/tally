@@ -1,3 +1,5 @@
 Tally.xcodeproj/
 build/
 Tally/Info.plist
+KirokuShare/Info.plist
+*.entitlements

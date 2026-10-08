@@ -1,4 +1,4 @@
-# Fresh install → 「連線到你的 Tally」 → local backend without Access → library shows the seeded recording.
+# Fresh install → 「連線到你的 Kiroku」 → local backend without Access → library shows the seeded recording.
 appId: ai.3mi.tally
 env:
   BACKEND: ${BACKEND || 'http://127.0.0.1:8795'}
@@ -8,7 +8,7 @@ env:
     clearKeychain: true
     permissions:
       microphone: allow
-- assertVisible: 連線到你的 Tally
+- assertVisible: 連線到你的 Kiroku
 - tapOn:
     id: connect.url
 - eraseText: 60

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="818" height="412" viewBox="96 286 818 412" fill="none">
+<defs><linearGradient id="k-wave" gradientUnits="userSpaceOnUse" x1="384" y1="0" x2="468" y2="0"><stop offset="0" stop-color="#1C6B5B"/><stop offset="1" stop-color="#142D3B"/></linearGradient></defs>
+<g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="58">
+  <path stroke="url(#k-wave)" d="M182 588C214 588 220 428 256 428C298 428 288 670 326 670C366 670 340 322 379 322C418 322 398 666 436 666C474 666 466 432 505 432C540 432 546 538 572 538C602 538 612 454 662 454H884"/>
+  <path stroke="#142D3B" d="M656 556H878M548 656H866"/>
+  <path stroke="#1C6B5B" d="M132 512V560"/>
+</g>
+</svg>

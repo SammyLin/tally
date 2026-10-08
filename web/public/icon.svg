@@ -1,7 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-<rect width="64" height="64" rx="14" fill="#f3efe6"/>
-<path d="M45.18 43.08A18 18 0 0 1 21.46 47.26L12.10 50.36L15.74 41.54A18 18 0 0 1 45.18 20.92" fill="none" stroke="#1b1a17" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M43.33 26.51A13.5 13.5 0 0 1 43.33 37.49" fill="none" stroke="#1b1a17" stroke-width="4" stroke-linecap="round"/>
-<path d="M49.62 21.25A21.5 21.5 0 0 1 49.62 42.75" fill="none" stroke="#1b1a17" stroke-width="4" stroke-linecap="round"/>
-<circle cx="29.5" cy="32" r="7.5" fill="#c0381f"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+<defs><linearGradient id="k-wave" gradientUnits="userSpaceOnUse" x1="384" y1="0" x2="468" y2="0"><stop offset="0" stop-color="#70CBB5"/><stop offset="1" stop-color="#F5F1E8"/></linearGradient></defs>
+<rect width="1024" height="1024" rx="228" fill="#142D3B"/>
+<g transform="translate(512 512) scale(1.1) translate(-508 -494)" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="58">
+  <path stroke="url(#k-wave)" d="M182 588C214 588 220 428 256 428C298 428 288 670 326 670C366 670 340 322 379 322C418 322 398 666 436 666C474 666 466 432 505 432C540 432 546 538 572 538C602 538 612 454 662 454H884"/>
+  <path stroke="#F5F1E8" d="M656 556H878M548 656H866"/>
+  <path stroke="#70CBB5" d="M132 512V560"/>
+</g>
 </svg>

@@ -10,22 +10,24 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f3efe6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#12110f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F5F1E8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1D26" media="(prefers-color-scheme: dark)">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Serif+TC:wght@700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous" defer onload="window.renderSummaries&&renderSummaries();window.renderAskBody&&renderAskBody()"></script>
 <style>
 [hidden]{display:none!important} /* a class's display (flex/grid) must never un-hide an element */
-/* 錄音室手記 — warm paper, ink, one signal red (the REC tally). Serif for titles, mono for timecodes. */
+/* Kiroku 記錄 — ivory paper, navy ink, one teal accent (seafoam in dark); red only while recording. Serif for titles, mono for timecodes. */
 :root{
-  --paper:#f3efe6;--panel:#fbf9f4;--sunk:#ebe5d8;--sel:#e6dfcf;--line:#d8d0c0;--line2:#e5dfd2;
-  --ink:#1b1a17;--ink2:#3b3934;--mute:#5f5a50;--faint:#716b5f;
-  --sig:#c0381f;--sig-ink:#fff;--sig-soft:#f7dfd7;--ok:#2b7a4b;--warn:#955800;--danger:#b3261e;
-  --s1:#2f5f8a;--s2:#8b3d7b;--s3:#3b6d35;--s4:#a2561a;--s5:#5a49a2;--s6:#1d6d73;--s7:#9c3342;--s8:#686322;
+  --paper:#F5F1E8;--panel:#FCFAF5;--sunk:#ECE6DA;--sel:#DCEDE6;--line:#D5CFC2;--line2:#E6E1D5;
+  --ink:#142D3B;--ink2:#2C4352;--mute:#4D5E68;--faint:#56656E;
+  --sig:#1C6B5B;--sig-ink:#fff;--sig-soft:#D5EDE5;--accent:#70CBB5;--rec:#B23224;--focus:#1C6B5B;
+  --ok:#276F44;--warn:#935700;--danger:#B3261E;
+  --s1:#2E5E86;--s2:#8A3E78;--s3:#3A6B35;--s4:#9A5318;--s5:#5A4A9E;--s6:#1B6A70;--s7:#9A3445;--s8:#63601F;
+  --k-wave:var(--sig);--scrim:rgb(15 29 38/.42);
   --r:12px;--r-s:8px;
-  --shadow:0 1px 0 rgb(40 30 10/.04),0 12px 32px -8px rgb(40 30 10/.18);
+  --shadow:0 1px 0 rgb(20 45 59/.05),0 12px 32px -8px rgb(20 45 59/.18);
   --serif:"Noto Serif TC","Songti TC","Source Han Serif TC",serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --sans:system-ui,-apple-system,"PingFang TC","Noto Sans TC","Noto Sans CJK TC","Microsoft JhengHei",sans-serif;
@@ -34,10 +36,12 @@
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility
 }
 @media (prefers-color-scheme:dark){:root{
-  --paper:#12110f;--panel:#1a1917;--sunk:#23211d;--sel:#2b2924;--line:#36332d;--line2:#29271f;
-  --ink:#eee9de;--ink2:#d2ccbf;--mute:#a9a396;--faint:#908a7e;
-  --sig:#ff6a4e;--sig-ink:#1c0904;--sig-soft:#3b1c15;--ok:#7fcf99;--warn:#e9b061;--danger:#ff8a80;
-  --s1:#8fb9e3;--s2:#dc9dd0;--s3:#9ccd92;--s4:#eba86c;--s5:#b6a8f0;--s6:#7ccdd4;--s7:#ef97a3;--s8:#cfc98a;
+  --paper:#0F1D26;--panel:#152733;--sunk:#1B303D;--sel:#1F3D45;--line:#2D4553;--line2:#1F3441;
+  --ink:#F5F1E8;--ink2:#D8D3C7;--mute:#A9B5BA;--faint:#9CAAB1;
+  --sig:#70CBB5;--sig-ink:#0F1D26;--sig-soft:#183F3C;--accent:#70CBB5;--rec:#FF7A66;--focus:#70CBB5;
+  --ok:#7FCF99;--warn:#E9B061;--danger:#FF8A80;
+  --s1:#8FB9E3;--s2:#DC9DD0;--s3:#9CCD92;--s4:#EBA86C;--s5:#B6A8F0;--s6:#7CCDD4;--s7:#EF97A3;--s8:#CFC98A;
+  --scrim:rgb(4 10 14/.6);
   --shadow:0 1px 0 rgb(0 0 0/.3),0 16px 40px -8px rgb(0 0 0/.6)
 }}
 *{box-sizing:border-box}
@@ -55,7 +59,7 @@ button.rec::before{content:"";width:.55em;height:.55em;border-radius:50%;backgro
 button.ghost{border-color:transparent;background:none}
 button.ghost:hover{background:var(--sunk)}
 button:disabled{opacity:.45;cursor:default;transform:none}
-:focus-visible{outline:2px solid var(--sig);outline-offset:2px}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 input[type=search],input[type=text],select{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-s);padding:.45em .7em;min-width:0;transition:border-color .15s}
 input[type=search]:focus,input[type=text]:focus,select:focus{border-color:var(--ink2)}
 input[type=search]:focus-visible,input[type=text]:focus-visible{outline:0;border-color:var(--sig);box-shadow:0 0 0 3px var(--sig-soft)}
@@ -73,8 +77,7 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .nav-head{padding:18px 14px 10px;display:grid;gap:12px}
 .brand{display:flex;align-items:center;gap:9px}
 .brand h1{font-family:var(--serif);font-size:1.12rem;font-weight:700;margin:0;letter-spacing:.06em}
-.mark{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--ink);display:grid;place-items:center;flex:none}
-.mark::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--sig)}
+.mark{width:30px;height:15px;color:var(--ink);flex:none;overflow:visible}
 .nav-acts{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 .nav-acts button{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:.5em .6em}
 .tree{overflow:auto;flex:1;padding:4px 8px 16px}
@@ -154,8 +157,8 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 
 /* ---- recording ---- */
 .rec-dlg{text-align:center;width:min(420px,calc(100vw - 32px))}
-.rec-dlg h2{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-size:.78rem;letter-spacing:.2em;color:var(--sig)}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--sig);animation:pulse 1.2s infinite}
+.rec-dlg h2{display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-size:.78rem;letter-spacing:.2em;color:var(--rec)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--rec);animation:pulse 1.2s infinite}
 .rec-time{font-family:var(--mono);font-size:3.4rem;font-variant-numeric:tabular-nums;font-weight:300;margin:6px 0 8px;letter-spacing:-.03em;line-height:1.1}
 .wave{display:block;width:100%;height:72px;margin:0 0 14px}
 .rec-dlg .row{flex-direction:column-reverse}
@@ -303,7 +306,7 @@ details.menu>div{position:absolute;right:0;top:calc(100% + 6px);background:var(-
 /* ---- dialogs, toasts, drop ---- */
 dialog{border:1px solid var(--line);border-radius:18px;background:var(--panel);color:var(--ink);padding:22px;width:min(400px,calc(100vw - 32px));box-shadow:var(--shadow)}
 dialog[open]{animation:pop .18s var(--ease)}
-dialog::backdrop{background:rgb(20 16 8/.38);backdrop-filter:blur(2px)}
+dialog::backdrop{background:var(--scrim);backdrop-filter:blur(2px)}
 dialog h2{font-family:var(--serif);font-size:1.15rem;margin:0 0 14px}
 dialog form{display:grid;gap:14px}
 dialog input[type=text]{width:100%;font-size:1.05rem;padding:.55em .8em}
@@ -398,7 +401,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   .topbar .ghost{min-width:44px;display:grid;place-items:center;padding:0}
   .lib{position:fixed;top:0;bottom:0;left:0;width:min(560px,92vw);z-index:40;transform:translateX(-102%);transition:transform .28s var(--ease);box-shadow:var(--shadow);border-right:0;padding-top:env(safe-area-inset-top);background:var(--paper);grid-template-columns:220px 1fr}
   .app.drawer .lib{transform:none}
-  .app.drawer .scrim{display:block;position:fixed;inset:0;z-index:39;background:rgb(20 16 8/.38);animation:fade .2s}
+  .app.drawer .scrim{display:block;position:fixed;inset:0;z-index:39;background:var(--scrim);animation:fade .2s}
   @keyframes fade{from{opacity:0}}
   .nav-head .brand,.nav-head .rchip,.nav-acts .rec{display:none}
   .nav-acts{grid-template-columns:1fr}
@@ -446,10 +449,18 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 </head>
 <body>
 <div class="alert" id="alert" role="alert" hidden><span id="alertMsg"></span><button type="button" onclick="location.reload()">重新整理</button></div>
+<svg width="0" height="0" style="position:absolute;color:var(--ink)" aria-hidden="true" focusable="false"><defs>
+  <linearGradient id="k-wave" gradientUnits="userSpaceOnUse" x1="384" y1="0" x2="468" y2="0"><stop offset="0" style="stop-color:var(--k-wave)"/><stop offset="1" stop-color="currentColor"/></linearGradient>
+  <symbol id="k-mark" viewBox="96 286 818 412"><g fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="58">
+    <path stroke="url(#k-wave)" d="M182 588C214 588 220 428 256 428C298 428 288 670 326 670C366 670 340 322 379 322C418 322 398 666 436 666C474 666 466 432 505 432C540 432 546 538 572 538C602 538 612 454 662 454H884"/>
+    <path stroke="currentColor" d="M656 556H878M548 656H866"/>
+    <path style="stroke:var(--k-wave)" d="M132 512V560"/>
+  </g></symbol>
+</defs></svg>
 <div class="app" id="app">
   <header class="topbar">
     <button type="button" class="ghost" id="menuBtn" aria-label="錄音清單" aria-expanded="false" aria-controls="lib"></button>
-    <span class="tb-title"><span class="mark" aria-hidden="true"></span>Kiroku</span>
+    <span class="tb-title"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg>Kiroku</span>
     <button type="button" class="rchip" data-runners aria-label="Runner 狀態"></button>
     <button type="button" class="rec" data-rec>錄音</button>
   </header>
@@ -457,7 +468,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   <aside class="lib" id="lib" aria-label="錄音清單">
     <nav class="nav" aria-label="資料夾">
       <div class="nav-head">
-        <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Kiroku</h1></div>
+        <div class="brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><h1>Kiroku</h1></div>
         <div class="nav-acts">
           <button type="button" class="rec" data-rec>錄音</button>
           <button type="button" data-import>匯入</button>
@@ -1078,7 +1089,7 @@ function drawWave(lvl){
   const n=Math.floor(w/5),now=performance.now();rec.hist??=[];
   if(now-(rec.pushed||0)>70){rec.hist.push(lvl);rec.pushed=now}else rec.hist[rec.hist.length-1]=Math.max(lvl,rec.hist.at(-1)??0);if(rec.hist.length>n)rec.hist.splice(0,rec.hist.length-n);
   const g=c.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,hh);
-  g.fillStyle=getComputedStyle(c).getPropertyValue('--sig')||'#d23f26';
+  g.fillStyle=getComputedStyle(c).getPropertyValue('--sig')||'#1C6B5B';
   rec.hist.forEach((v,i)=>{const bh=Math.max(2,v*hh);g.globalAlpha=.35+.65*(i/n);g.fillRect(w-(rec.hist.length-i)*5,(hh-bh)/2,3,bh)});
 }
 async function wakeLock(){try{if(rec&&navigator.wakeLock&&document.visibilityState==='visible')rec.lock=await navigator.wakeLock.request('screen')}catch{}}
@@ -1130,7 +1141,7 @@ function route(){
 addEventListener('hashchange',route);
 function hero(){
   return h('section',{class:'hero','aria-labelledby':'heroT'},
-    h('p',{class:'eyebrow',text:'TALLY · VOICE NOTES'}),
+    h('p',{class:'eyebrow',text:'KIROKU · 記錄'}),
     h('h2',{id:'heroT'},'把聲音，',h('br'),'變成可以',h('em',{text:'翻閱'}),'的筆記'),
     h('p',{text:'錄音或匯入音訊、影片，自動轉成逐字稿、分出每位講者，再整理成摘要。點任何一句話，就從那裡開始播放。'}),
     h('div',{class:'hero-acts'},

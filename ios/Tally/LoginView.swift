@@ -16,7 +16,7 @@ struct LoginView: View {
                 .ignoresSafeArea(edges: .bottom)
                 .safeAreaInset(edge: .top) { // no address bar in a web view: show where the credentials go
                     Label(host, systemImage: "lock.fill")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.caption).foregroundStyle(Color(.inkMuted))
                         .accessibilityLabel("目前網站：\(host)")
                         .accessibilityIdentifier("login.host")
                 }

@@ -65,48 +65,52 @@ struct AskView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
-                Section {
-                    TextField("問所有錄音，例如：" + Self.examples[0], text: $question, axis: .vertical)
-                        .lineLimit(2...6)
-                        .focused($focused)
-                        .submitLabel(.send)
-                        .onChange(of: question) { _, q in
-                            // Return sends (web: Enter); a vertical TextField inserts it as a newline
-                            if q.contains("\n") { question = q.replacing("\n", with: ""); send() }
-                            else if q.count > 1000 { question = String(q.prefix(1000)) }
+                Group {
+                    Section {
+                        TextField("問所有錄音，例如：" + Self.examples[0], text: $question, axis: .vertical)
+                            .lineLimit(2...6)
+                            .focused($focused)
+                            .submitLabel(.send)
+                            .onChange(of: question) { _, q in
+                                // Return sends (web: Enter); a vertical TextField inserts it as a newline
+                                if q.contains("\n") { question = q.replacing("\n", with: ""); send() }
+                                else if q.count > 1000 { question = String(q.prefix(1000)) }
+                            }
+                            .accessibilityLabel("問題")
+                            .accessibilityIdentifier("ask.input")
+                        Button(action: send) {
+                            HStack { Text("送出"); if sending { Spacer(); ProgressView() } }
                         }
-                        .accessibilityLabel("問題")
-                        .accessibilityIdentifier("ask.input")
-                    Button(action: send) {
-                        HStack { Text("送出"); if sending { Spacer(); ProgressView() } }
+                        .disabled(sending || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .accessibilityIdentifier("ask.send")
+                    } footer: {
+                        Text("會先找出相關錄音，再讀逐字稿回答，每句都附出處。")
                     }
-                    .disabled(sending || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("ask.send")
-                } footer: {
-                    Text("會先找出相關錄音，再讀逐字稿回答，每句都附出處。")
-                }
-                Section("試試") {
-                    ForEach(Self.examples, id: \.self) { q in
-                        Button(q) { question = q; focused = true }
-                    }
-                }
-                Section {
-                    if let asks {
-                        if asks.isEmpty { Text("還沒有提問").foregroundStyle(.secondary).accessibilityIdentifier("ask.empty") }
-                        ForEach(asks) { a in
-                            NavigationLink(value: AskRoute.ask(a.id)) { AskRow(ask: a) }
-                                .accessibilityIdentifier("ask.\(a.id)")
+                    Section("試試") {
+                        ForEach(Self.examples, id: \.self) { q in
+                            Button(q) { question = q; focused = true }
                         }
-                    } else if let error {
-                        Text("無法載入：\(error)").foregroundStyle(.red)
-                        Button("重試") { Task { await load() } }
-                    } else {
-                        ProgressView()
                     }
-                } header: {
-                    if let n = asks?.count, n > 0 { Text("\(n) 筆") }
+                    Section {
+                        if let asks {
+                            if asks.isEmpty { Text("還沒有提問").foregroundStyle(Color(.inkMuted)).accessibilityIdentifier("ask.empty") }
+                            ForEach(asks) { a in
+                                NavigationLink(value: AskRoute.ask(a.id)) { AskRow(ask: a) }
+                                    .accessibilityIdentifier("ask.\(a.id)")
+                            }
+                        } else if let error {
+                            Text("無法載入：\(error)").foregroundStyle(Color(.danger))
+                            Button("重試") { Task { await load() } }
+                        } else {
+                            ProgressView()
+                        }
+                    } header: {
+                        if let n = asks?.count, n > 0 { Text("\(n) 筆") }
+                    }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("問問看")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
@@ -168,14 +172,14 @@ private struct AskRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(ask.question).font(.headline).lineLimit(2)
-            if let p = ask.preview, !p.isEmpty { Text(p).font(.subheadline).foregroundStyle(.secondary).lineLimit(2) }
+            if let p = ask.preview, !p.isEmpty { Text(p).font(.subheadline).foregroundStyle(Color(.inkMuted)).lineLimit(2) }
             HStack(spacing: 8) {
                 Text(Prompt.fmtShort(ask.createdAt))
                 if ask.status != "done" {
                     Badge(text: Ask.statusLabels[ask.status] ?? ask.status, busy: ask.status != "error", error: ask.status == "error")
                 }
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(.caption).foregroundStyle(Color(.inkMuted))
         }
         .accessibilityElement(children: .combine)
     }
@@ -235,35 +239,39 @@ struct AskDetailView: View {
     @ViewBuilder private func content(_ a: Ask) -> some View {
         let titles = Dictionary((a.recordings ?? []).map { ($0.id, $0.title) }, uniquingKeysWith: { x, _ in x })
         List {
-            Section {
-                Text(a.question).font(.headline).accessibilityIdentifier("ask.question")
-                Text(Prompt.fmtDate(a.createdAt)).font(.caption).foregroundStyle(.secondary)
-            }
-            Section {
-                switch a.status {
-                case "queued": Label(app.queuedText, systemImage: "hourglass").foregroundStyle(.orange)
-                case "running": Label("思考中：正在找出相關錄音、閱讀逐字稿…", systemImage: "hourglass").foregroundStyle(.orange)
-                case "error":
-                    Text("回答失敗：\(a.error ?? "未知錯誤")").foregroundStyle(.red)
-                    Button("重試") { Task { await retry() } }.accessibilityIdentifier("ask.retry")
-                default:
-                    MarkdownView(markdown: Cite.linkify(a.answerMd ?? "", titles: titles))
-                        .accessibilityIdentifier("ask.answer")
+            Group {
+                Section {
+                    Text(a.question).font(.headline).accessibilityIdentifier("ask.question")
+                    Text(Prompt.fmtDate(a.createdAt)).font(.caption).foregroundStyle(Color(.inkMuted))
                 }
-            }
-            // sources still in the database (purged ones are absent from `recordings`)
-            let used = a.status == "done" ? (a.sources ?? []).filter { titles[$0] != nil } : []
-            if !used.isEmpty {
-                Section("參考錄音") {
-                    ForEach(used, id: \.self) { rid in
-                        NavigationLink(value: AskRoute.recording(rid, ms: nil)) {
-                            Label(titles[rid] ?? "錄音 #\(rid)", systemImage: "waveform")
+                Section {
+                    switch a.status {
+                    case "queued": Label(app.queuedText, systemImage: "hourglass").foregroundStyle(Color(.warn))
+                    case "running": Label("思考中：正在找出相關錄音、閱讀逐字稿…", systemImage: "hourglass").foregroundStyle(Color(.warn))
+                    case "error":
+                        Text("回答失敗：\(a.error ?? "未知錯誤")").foregroundStyle(Color(.danger))
+                        Button("重試") { Task { await retry() } }.accessibilityIdentifier("ask.retry")
+                    default:
+                        MarkdownView(markdown: Cite.linkify(a.answerMd ?? "", titles: titles))
+                            .accessibilityIdentifier("ask.answer")
+                    }
+                }
+                // sources still in the database (purged ones are absent from `recordings`)
+                let used = a.status == "done" ? (a.sources ?? []).filter { titles[$0] != nil } : []
+                if !used.isEmpty {
+                    Section("參考錄音") {
+                        ForEach(used, id: \.self) { rid in
+                            NavigationLink(value: AskRoute.recording(rid, ms: nil)) {
+                                Label(titles[rid] ?? "錄音 #\(rid)", systemImage: "waveform")
+                            }
+                            .accessibilityIdentifier("ask.source.\(rid)")
                         }
-                        .accessibilityIdentifier("ask.source.\(rid)")
                     }
                 }
             }
+            .kirokuRows()
         }
+        .kirokuList()
         .environment(\.openURL, OpenURLAction { url in
             guard let t = Cite.target(url) else { return .systemAction }
             citation = Citation(id: t.id, ms: t.ms)

@@ -113,25 +113,29 @@ struct SettingsView: View {
 
     private var form: some View {
         Form {
-            if let message {
-                Section { Text(message).foregroundStyle(.red).accessibilityIdentifier("settings.error") }
-            }
-            if saved != nil {
-                aiSection
-                languageSection
-                speakerSection
-                vocabSection
-                Section {} footer: { Text("設定只影響之後的新工作；既有錄音可重新轉錄或重新產生摘要。") }
-            } else if let loadError {
-                Section {
-                    Text("無法載入設定：\(loadError)").foregroundStyle(.red)
-                    Button("重試") { Task { await load() } }
+            Group {
+                if let message {
+                    Section { Text(message).foregroundStyle(Color(.danger)).accessibilityIdentifier("settings.error") }
                 }
-            } else {
-                Section { ProgressView() }
+                if saved != nil {
+                    aiSection
+                    languageSection
+                    speakerSection
+                    vocabSection
+                    Section {} footer: { Text("設定只影響之後的新工作；既有錄音可重新轉錄或重新產生摘要。") }
+                } else if let loadError {
+                    Section {
+                        Text("無法載入設定：\(loadError)").foregroundStyle(Color(.danger))
+                        Button("重試") { Task { await load() } }
+                    }
+                } else {
+                    Section { ProgressView() }
+                }
+                backendSections
             }
-            backendSections
+            .kirokuRows()
         }
+        .kirokuList()
         .scrollDismissesKeyboard(.immediately)
     }
 
@@ -168,7 +172,7 @@ struct SettingsView: View {
 
     private func textArea(_ label: String, text: Binding<String>, prompt: String = "", id: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
+            Text(label).font(.caption).foregroundStyle(Color(.inkMuted))
             TextField(prompt, text: text, axis: .vertical)
                 .lineLimit(2...6)
                 .onChange(of: text.wrappedValue) { _, v in if v.count > 500 { text.wrappedValue = String(v.prefix(500)) } }
@@ -196,9 +200,9 @@ struct SettingsView: View {
             }
             .accessibilityIdentifier("settings.me")
             if let personsError {
-                Text("無法載入講者：\(personsError)").foregroundStyle(.secondary)
+                Text("無法載入講者：\(personsError)").foregroundStyle(Color(.inkMuted))
             } else if persons.isEmpty {
-                Text("還沒有講者。在逐字稿中為講者命名後會出現在這裡。").foregroundStyle(.secondary)
+                Text("還沒有講者。在逐字稿中為講者命名後會出現在這裡。").foregroundStyle(Color(.inkMuted))
             }
             ForEach(persons) { p in personRow(p) }
         } header: {
@@ -213,10 +217,10 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 0) {
                     Text(p.name)
-                    if p.id == saved?.me { Text("（我）").foregroundStyle(.secondary) }
+                    if p.id == saved?.me { Text("（我）").foregroundStyle(Color(.inkMuted)) }
                 }
                 Text(["\(p.prints ?? 0) 個聲紋", (p.speakers ?? 0) > 0 ? "\(p.speakers!) 位講者" : nil].compactMap { $0 }.joined(separator: " · "))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Color(.inkMuted))
             }
             .accessibilityElement(children: .combine)
             Spacer()
@@ -232,9 +236,9 @@ struct SettingsView: View {
         Section {
             if let sug = suggestions {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("建議加入（加入、忽略立即生效）").font(.caption).foregroundStyle(.secondary)
+                    Text("建議加入（加入、忽略立即生效）").font(.caption).foregroundStyle(Color(.inkMuted))
                     if sug.suggestions.isEmpty {
-                        Text("還沒有建議。累積更多錄音後會自動分析。").foregroundStyle(.secondary)
+                        Text("還沒有建議。累積更多錄音後會自動分析。").foregroundStyle(Color(.inkMuted))
                     }
                 }
                 ForEach(sug.suggestions, id: \.term) { s in suggestionRow(s) }
@@ -244,7 +248,7 @@ struct SettingsView: View {
                 HStack {
                     Text(w)
                     Spacer()
-                    Button { draft.vocab.removeAll { $0 == w } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                    Button { draft.vocab.removeAll { $0 == w } } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Color(.inkMuted)) }
                         .buttonStyle(.borderless)
                         .accessibilityLabel("移除 \(w)")
                 }
@@ -275,12 +279,12 @@ struct SettingsView: View {
                 Text(s.term).bold()
                 Text(["出現 \(s.hits) 次", "\(s.recordings) 份錄音",
                       s.misheard.isEmpty ? nil : "曾被聽成「\(s.misheard.prefix(3).joined(separator: "」「"))」"].compactMap { $0 }.joined(separator: "・"))
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.caption).foregroundStyle(Color(.inkMuted))
             }
             .accessibilityElement(children: .combine)
             Spacer()
             Button("加入") { Task { await suggestion(s, add: true) } }.accessibilityLabel("加入「\(s.term)」")
-            Button("忽略") { Task { await suggestion(s, add: false) } }.accessibilityLabel("忽略「\(s.term)」").foregroundStyle(.secondary)
+            Button("忽略") { Task { await suggestion(s, add: false) } }.accessibilityLabel("忽略「\(s.term)」").foregroundStyle(Color(.inkMuted))
         }
         .buttonStyle(.borderless)
     }
@@ -292,7 +296,7 @@ struct SettingsView: View {
             : l?.at.map { "上次分析：\(Prompt.fmtDate($0))" }
         if status != nil || (!sug.scanning && sug.pending > 0) {
             HStack {
-                if let status { Text(status).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("vocab.scan") }
+                if let status { Text(status).font(.caption).foregroundStyle(Color(.inkMuted)).accessibilityIdentifier("vocab.scan") }
                 Spacer()
                 if !sug.scanning && sug.pending > 0 {
                     Button("立即分析") { Task { await scanNow() } }.buttonStyle(.borderless).font(.caption)

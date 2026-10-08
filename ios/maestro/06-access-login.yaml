@@ -23,4 +23,4 @@ env:
     timeout: 30000
 - takeScreenshot: ${SHOTS || '/tmp'}/m06-access
 - tapOn: 取消
-- assertVisible: 連線到你的 Tally
+- assertVisible: 連線到你的 Kiroku

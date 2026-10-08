@@ -22,31 +22,35 @@ struct LibraryView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
-                if let runners = app.runners {
-                    Button { showRunners = true } label: { RunnerStatusRow(runners: runners) }
-                        .accessibilityIdentifier("library.runners")
-                }
-                UploadsSection()
-                if let error {
-                    Section {
-                        Label(recordings.isEmpty ? "無法載入清單：\(error)" : error, systemImage: "exclamationmark.triangle").foregroundStyle(.red)
-                        if recordings.isEmpty { Button("重試") { Task { await load() } } }
+                Group {
+                    if let runners = app.runners {
+                        Button { showRunners = true } label: { RunnerStatusRow(runners: runners) }
+                            .accessibilityIdentifier("library.runners")
                     }
-                }
-                Section {
-                    ForEach(recordings) { r in
-                        NavigationLink(value: RecRoute(id: r.id)) {
-                            // inside a folder view the folder is implied
-                            RecordingRow(recording: r, folder: folderID == nil ? r.folderId.flatMap { fid in folders.first { $0.id == fid }?.name } : nil)
+                    UploadsSection()
+                    if let error {
+                        Section {
+                            Label(recordings.isEmpty ? "無法載入清單：\(error)" : error, systemImage: "exclamationmark.triangle").foregroundStyle(Color(.danger))
+                            if recordings.isEmpty { Button("重試") { Task { await load() } } }
                         }
-                        .accessibilityIdentifier("recording.\(r.id)")
                     }
-                } header: {
-                    if !recordings.isEmpty { Text("\(recordings.count) 筆").accessibilityIdentifier("library.count") }
-                } footer: {
-                    if loaded && recordings.isEmpty && error == nil { Text(emptyText).accessibilityIdentifier("library.empty") }
+                    Section {
+                        ForEach(recordings) { r in
+                            NavigationLink(value: RecRoute(id: r.id)) {
+                                // inside a folder view the folder is implied
+                                RecordingRow(recording: r, folder: folderID == nil ? r.folderId.flatMap { fid in folders.first { $0.id == fid }?.name } : nil)
+                            }
+                            .accessibilityIdentifier("recording.\(r.id)")
+                        }
+                    } header: {
+                        if !recordings.isEmpty { Text("\(recordings.count) 筆").accessibilityIdentifier("library.count") }
+                    } footer: {
+                        if loaded && recordings.isEmpty && error == nil { Text(emptyText).accessibilityIdentifier("library.empty") }
+                    }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle(title)
             .navigationDestination(for: RecRoute.self) { DetailView(id: $0.id, seekMs: $0.ms, summary: $0.summary).id($0) } // a link may replace the open one
             .searchable(text: $query, prompt: "搜尋標題或逐字稿")
@@ -152,6 +156,7 @@ struct LibraryView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .principal) { KirokuMark(height: 18) }
         ToolbarItem(placement: .topBarLeading) {
             Button { showFolders = true } label: { Label("資料夾", systemImage: "sidebar.left") }
                 .accessibilityIdentifier("library.folders")
@@ -170,9 +175,9 @@ struct LibraryView: View {
         Button { showRecord = true } label: {
             Image(systemName: "mic.fill")
                 .font(.title.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(.onAccent)) // white on light Rec, navy on dark Rec
                 .frame(width: 72, height: 72)
-                .background(.red, in: .circle)
+                .background(Color(.rec), in: .circle)
                 .shadow(radius: 4, y: 2)
         }
         .accessibilityLabel("開始錄音")
@@ -224,7 +229,7 @@ struct RecordingRow: View {
                 Text(recording.title).font(.headline).lineLimit(2)
                 Spacer()
                 if recording.hasSummary == true {
-                    Image(systemName: "doc.text").foregroundStyle(.secondary).accessibilityLabel("有摘要")
+                    Image(systemName: "doc.text").foregroundStyle(Color(.inkMuted)).accessibilityLabel("有摘要")
                 }
             }
             HStack(spacing: 8) {
@@ -237,7 +242,7 @@ struct RecordingRow: View {
                 if let folder { Label(folder, systemImage: "folder").lineLimit(1) }
             }
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color(.inkMuted))
             if let top = recording.topSpeakers, !top.isEmpty {
                 Text(top.map { "\($0.name ?? "未知講者") \($0.pct ?? 0)%" }.joined(separator: " · "))
                     .font(.caption)
@@ -263,9 +268,9 @@ struct UploadsSection: View {
                         if let p = queue.progress[item.id] {
                             ProgressView(value: p).accessibilityLabel("上傳進度")
                         } else if let err = item.error {
-                            Text("\(err)（將自動重試）").font(.caption).foregroundStyle(.orange)
+                            Text("\(err)（將自動重試）").font(.caption).foregroundStyle(Color(.warn))
                         } else {
-                            Text(app.needsLogin ? "等待登入" : "等待上傳").font(.caption).foregroundStyle(.secondary)
+                            Text(app.needsLogin ? "等待登入" : "等待上傳").font(.caption).foregroundStyle(Color(.inkMuted))
                         }
                     }
                     .accessibilityIdentifier("upload.item")
@@ -289,10 +294,10 @@ struct RunnerStatusRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Circle().fill(runners.online > 0 ? .green : .gray).frame(width: 9, height: 9).accessibilityHidden(true)
-            Text(runners.headline).foregroundStyle(runners.warn ? .orange : .primary)
+            Circle().fill(runners.online > 0 ? Color(.ok) : .gray).frame(width: 9, height: 9).accessibilityHidden(true)
+            Text(runners.headline).foregroundStyle(runners.warn ? AnyShapeStyle(Color(.warn)) : AnyShapeStyle(.primary))
             if runners.waiting > 0 { Badge(text: "排隊 \(runners.waiting)", busy: true) }
-            if runners.warn { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange).accessibilityLabel("有工作在等待") }
+            if runners.warn { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color(.warn)).accessibilityLabel("有工作在等待") }
             Spacer()
             Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true)
         }

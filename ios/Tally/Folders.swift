@@ -163,27 +163,31 @@ struct FoldersSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    nav("最近", "clock", .recent)
-                    nav("全部", "tray.full", .all)
-                    nav("未分類", "tray", .unfiled)
-                }
-                Section {
-                    ForEach(FolderTree.flatten(folders), id: \.folder.id) { item in
-                        folderRow(item.folder, depth: item.depth)
+                Group {
+                    Section {
+                        nav("最近", "clock", .recent)
+                        nav("全部", "tray.full", .all)
+                        nav("未分類", "tray", .unfiled)
                     }
-                    if folders.isEmpty { Text("尚無資料夾").foregroundStyle(.secondary) }
-                } header: {
-                    HStack {
-                        Text("資料夾")
-                        Spacer()
-                        Button { startNaming(.create(parent: nil)) } label: { Image(systemName: "plus") }
-                            .accessibilityLabel("新增資料夾")
-                            .accessibilityIdentifier("folders.add")
+                    Section {
+                        ForEach(FolderTree.flatten(folders), id: \.folder.id) { item in
+                            folderRow(item.folder, depth: item.depth)
+                        }
+                        if folders.isEmpty { Text("尚無資料夾").foregroundStyle(Color(.inkMuted)) }
+                    } header: {
+                        HStack {
+                            Text("資料夾")
+                            Spacer()
+                            Button { startNaming(.create(parent: nil)) } label: { Image(systemName: "plus") }
+                                .accessibilityLabel("新增資料夾")
+                                .accessibilityIdentifier("folders.add")
+                        }
                     }
+                    Section { nav("垃圾桶", "trash", .trash) }
                 }
-                Section { nav("垃圾桶", "trash", .trash) }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("資料夾")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
@@ -221,7 +225,7 @@ struct FoldersSheet: View {
                 HStack {
                     Label(f.name, systemImage: "folder").foregroundStyle(scope == .folder(f.id) ? Color.accentColor : .primary)
                     Spacer()
-                    if f.count > 0 { Text("\(f.count)").foregroundStyle(.secondary).monospacedDigit() }
+                    if f.count > 0 { Text("\(f.count)").foregroundStyle(Color(.inkMuted)).monospacedDigit() }
                 }
                 .contentShape(.rect)
             }
@@ -303,14 +307,18 @@ struct FolderPicker: View {
     var body: some View {
         NavigationStack {
             List {
-                row(rootLabel, rootIcon, nil, depth: 0)
-                ForEach(FolderTree.flatten(folders, exclude: exclude), id: \.folder.id) { item in
-                    row(item.folder.name, "folder", item.folder.id, depth: item.depth)
+                Group {
+                    row(rootLabel, rootIcon, nil, depth: 0)
+                    ForEach(FolderTree.flatten(folders, exclude: exclude), id: \.folder.id) { item in
+                        row(item.folder.name, "folder", item.folder.id, depth: item.depth)
+                    }
+                    if folders.allSatisfy({ exclude.contains($0.id) }) {
+                        Text("還沒有資料夾，可在「資料夾」旁按 + 新增。").font(.footnote).foregroundStyle(Color(.inkMuted))
+                    }
                 }
-                if folders.allSatisfy({ exclude.contains($0.id) }) {
-                    Text("還沒有資料夾，可在「資料夾」旁按 + 新增。").font(.footnote).foregroundStyle(.secondary)
-                }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
@@ -354,15 +362,19 @@ struct LanguageSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Picker("語言", selection: $language) {
-                        ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                Group {
+                    Section {
+                        Picker("語言", selection: $language) {
+                            ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                        }
+                        .pickerStyle(.inline)
+                    } footer: {
+                        if !note.isEmpty { Text(note) }
                     }
-                    .pickerStyle(.inline)
-                } footer: {
-                    if !note.isEmpty { Text(note) }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

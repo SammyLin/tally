@@ -40,8 +40,8 @@ struct RecordView: View {
                 .frame(height: 48)
                 .padding(.horizontal, 32)
                 .accessibilityHidden(true)
-            Text(statusText).foregroundStyle(.secondary).font(.callout)
-            if let error { Text(error).accessibilityIdentifier("record.error").foregroundStyle(.red).multilineTextAlignment(.center).padding(.horizontal) }
+            Text(statusText).foregroundStyle(Color(.inkMuted)).font(.callout)
+            if let error { Text(error).accessibilityIdentifier("record.error").foregroundStyle(Color(.danger)).multilineTextAlignment(.center).padding(.horizontal) }
             Spacer()
             HStack(spacing: 48) {
                 if rec.isActive {
@@ -58,11 +58,11 @@ struct RecordView: View {
                 }
                 Button(action: mainAction) {
                     ZStack {
-                        Circle().stroke(.red, lineWidth: 4).frame(width: 88, height: 88)
+                        Circle().stroke(Color(.rec), lineWidth: 4).frame(width: 88, height: 88)
                         if rec.isActive {
-                            RoundedRectangle(cornerRadius: 8).fill(.red).frame(width: 34, height: 34)
+                            RoundedRectangle(cornerRadius: 8).fill(Color(.rec)).frame(width: 34, height: 34)
                         } else {
-                            Circle().fill(.red).frame(width: 72, height: 72)
+                            Circle().fill(Color(.rec)).frame(width: 72, height: 72)
                         }
                     }
                 }
@@ -72,6 +72,7 @@ struct RecordView: View {
             .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity)
+        .background(Color(.paper))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 if !rec.isActive { Button("關閉") { dismiss() } }
@@ -103,32 +104,36 @@ struct RecordView: View {
 
     private var saveForm: some View {
         Form {
-            Section("標題") {
-                TextField("標題", text: $title).accessibilityIdentifier("save.title")
-            }
-            Section("資料夾") {
-                Picker("資料夾", selection: $folder) {
-                    Text("未分類").tag(Int?.none)
-                    ForEach(FolderTree.flatten(folders), id: \.folder.id) { item in
-                        Text(String(repeating: "　", count: item.depth) + item.folder.name).tag(Int?.some(item.folder.id))
+            Group {
+                Section("標題") {
+                    TextField("標題", text: $title).accessibilityIdentifier("save.title")
+                }
+                Section("資料夾") {
+                    Picker("資料夾", selection: $folder) {
+                        Text("未分類").tag(Int?.none)
+                        ForEach(FolderTree.flatten(folders), id: \.folder.id) { item in
+                            Text(String(repeating: "　", count: item.depth) + item.folder.name).tag(Int?.some(item.folder.id))
+                        }
                     }
                 }
-            }
-            Section("語言") {
-                Picker("語言", selection: $language) {
-                    ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                Section("語言") {
+                    Picker("語言", selection: $language) {
+                        ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                    }
+                    .accessibilityIdentifier("save.language")
                 }
-                .accessibilityIdentifier("save.language")
+                Section {
+                    Button("儲存並上傳", action: save).bold().accessibilityIdentifier("save.submit")
+                } footer: {
+                    Text("錄音會先存在手機上，上傳完成後才刪除本機檔案。")
+                }
+                Section {
+                    Button("捨棄這段錄音", role: .destructive) { confirmDiscard = true }
+                }
             }
-            Section {
-                Button("儲存並上傳", action: save).bold().accessibilityIdentifier("save.submit")
-            } footer: {
-                Text("錄音會先存在手機上，上傳完成後才刪除本機檔案。")
-            }
-            Section {
-                Button("捨棄這段錄音", role: .destructive) { confirmDiscard = true }
-            }
+            .kirokuRows()
         }
+        .kirokuList()
         .navigationTitle("儲存錄音")
         .confirmationDialog("確定要捨棄？錄音將無法復原。", isPresented: $confirmDiscard, titleVisibility: .visible) {
             Button("捨棄", role: .destructive) {
@@ -162,7 +167,7 @@ struct LevelMeter: View {
                 ForEach(0..<bars, id: \.self) { i in
                     let on = Float(i) / Float(bars) < level
                     Capsule()
-                        .fill(on ? Color.red : Color.secondary.opacity(0.25))
+                        .fill(on ? Color.accentColor : Color.secondary.opacity(0.25))
                         .frame(height: geo.size.height * (0.3 + 0.7 * CGFloat(on ? 1 : 0.4)))
                 }
             }

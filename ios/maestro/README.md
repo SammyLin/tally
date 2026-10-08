@@ -21,7 +21,7 @@ delete summary, folder name on list rows) · 09 retranscribe with language, tras
 vocabulary + suggestion, 我是誰, person rename → merge, unsaved-changes guard, a > 50-character word blocks 儲存, save checked via the API, 「（我）」, delete person).
 12 parity (runner header 「沒有 runner 在線」「排隊 1」, no-runner notice, tally:// links to the summary tab / trash / 問問看,
 Markdown table / list / quote / code and summary date, 1.75×, speaker bands, transcript range → 「複製這段為 Prompt」,
-removing an offline runner). `subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Tally」中打開嗎？」.
+removing an offline runner). `subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
 `scripts/recording-field.js` reads a recording field from the backend for `assertTrue`.
 
 Options: `-e BACKEND=http://…` (default `http://127.0.0.1:8795`), `-e SHOTS=<dir>` for screenshots (default /tmp), `-e ACCESS_BACKEND=…`

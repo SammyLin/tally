@@ -123,7 +123,7 @@ struct MarkdownView: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) { Text("\(n).").monospacedDigit(); inline(s) }
                 .padding(.leading, CGFloat(indent) * 16)
         case .quote(let s):
-            inline(s).foregroundStyle(.secondary).padding(.leading, 10)
+            inline(s).foregroundStyle(Color(.inkMuted)).padding(.leading, 10)
                 .overlay(alignment: .leading) { Rectangle().fill(.tertiary).frame(width: 3) }
         case .code(let s):
             ScrollView(.horizontal) {

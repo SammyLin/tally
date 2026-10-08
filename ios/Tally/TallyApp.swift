@@ -33,33 +33,40 @@ struct ConnectView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("https://records.example.com", text: $address)
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .onSubmit(connect)
-                        .accessibilityIdentifier("connect.url")
-                } header: {
-                    Text("後端網址")
-                } footer: {
-                    Text("你的 Kiroku 伺服器網址（Kiroku Cloud 或自架）。若有 Cloudflare Access 保護，下一步會請你登入。")
-                }
-                if let message {
-                    Section { Text(message).foregroundStyle(.red).accessibilityIdentifier("connect.error") }
-                }
-                Section {
-                    Button(action: connect) {
-                        HStack {
-                            Text("連線")
-                            if busy { Spacer(); ProgressView() }
+                Group {
+                    Section {
+                        TextField("https://records.example.com", text: $address)
+                            .keyboardType(.URL)
+                            .textContentType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .onSubmit(connect)
+                            .accessibilityIdentifier("connect.url")
+                    } header: {
+                        VStack(alignment: .leading, spacing: 20) {
+                            KirokuMark(height: 44)
+                            Text("後端網址")
                         }
+                    } footer: {
+                        Text("你的 Kiroku 伺服器網址（Kiroku Cloud 或自架）。若有 Cloudflare Access 保護，下一步會請你登入。")
                     }
-                    .accessibilityIdentifier("connect.submit")
-                    .disabled(busy || address.trimmingCharacters(in: .whitespaces).isEmpty)
+                    if let message {
+                        Section { Text(message).foregroundStyle(Color(.danger)).accessibilityIdentifier("connect.error") }
+                    }
+                    Section {
+                        Button(action: connect) {
+                            HStack {
+                                Text("連線")
+                                if busy { Spacer(); ProgressView() }
+                            }
+                        }
+                        .accessibilityIdentifier("connect.submit")
+                        .disabled(busy || address.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("連線到你的 Kiroku")
             .onAppear { if address.isEmpty { address = app.baseURL?.absoluteString ?? AppModel.defaultBackend } }
             .sheet(item: $loginURL) { url in
@@ -114,29 +121,33 @@ struct RunnersView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    if let q = data?.queued {
-                        Text("排隊中：\(q.recordings) 份錄音、\(q.summaries) 份摘要、\(q.asks ?? 0) 個提問\((q.vocab ?? 0) > 0 ? "、詞彙分析" : "")")
-                            .foregroundStyle(.secondary)
-                    }
-                } footer: {
-                    Text("Runner 是在 Mac 上處理轉文字、分辨說話者與摘要的程式。沒有 runner 在線時，新的錄音會排隊，等 runner 上線後自動處理。")
-                }
-                Section {
-                    if let runners = data?.runners {
-                        if runners.isEmpty { Text("還沒有 runner 連線過。").foregroundStyle(.secondary) }
-                        let latest = Self.latestBuild(runners)
-                        ForEach(runners, id: \.name) { r in
-                            // only an offline runner can be removed; it comes back by itself if it connects again
-                            RunnerRow(runner: r, latest: latest, onRemove: r.online ? nil : { Task { await remove(r) } })
+                Group {
+                    Section {
+                        if let q = data?.queued {
+                            Text("排隊中：\(q.recordings) 份錄音、\(q.summaries) 份摘要、\(q.asks ?? 0) 個提問\((q.vocab ?? 0) > 0 ? "、詞彙分析" : "")")
+                                .foregroundStyle(Color(.inkMuted))
                         }
-                    } else if let error {
-                        Text(error).foregroundStyle(.red)
-                    } else {
-                        ProgressView()
+                    } footer: {
+                        Text("Runner 是在 Mac 上處理轉文字、分辨說話者與摘要的程式。沒有 runner 在線時，新的錄音會排隊，等 runner 上線後自動處理。")
+                    }
+                    Section {
+                        if let runners = data?.runners {
+                            if runners.isEmpty { Text("還沒有 runner 連線過。").foregroundStyle(Color(.inkMuted)) }
+                            let latest = Self.latestBuild(runners)
+                            ForEach(runners, id: \.name) { r in
+                                // only an offline runner can be removed; it comes back by itself if it connects again
+                                RunnerRow(runner: r, latest: latest, onRemove: r.online ? nil : { Task { await remove(r) } })
+                            }
+                        } else if let error {
+                            Text(error).foregroundStyle(Color(.danger))
+                        } else {
+                            ProgressView()
+                        }
                     }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("Runner 狀態")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
@@ -188,7 +199,7 @@ private struct RunnerRow: View {
 
     private var info: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Circle().fill(runner.online ? .green : .gray).frame(width: 9, height: 9)
+            Circle().fill(runner.online ? Color(.ok) : .gray).frame(width: 9, height: 9)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
@@ -196,7 +207,7 @@ private struct RunnerRow: View {
                     if let stt = runner.stt { Badge(text: stt == "groq" ? "Groq" : "本機 Whisper") }
                     version
                 }
-                Text(what).font(.subheadline).foregroundStyle(.secondary)
+                Text(what).font(.subheadline).foregroundStyle(Color(.inkMuted))
             }
         }
         .accessibilityElement(children: .combine)
@@ -238,7 +249,7 @@ struct Badge: View {
             .font(.caption2.weight(.medium))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .foregroundStyle(error ? .red : busy ? .orange : .secondary)
-            .background((error ? Color.red : busy ? .orange : .secondary).opacity(0.12), in: .capsule)
+            .foregroundStyle(error ? AnyShapeStyle(Color(.danger)) : busy ? AnyShapeStyle(Color(.warn)) : AnyShapeStyle(Color(.inkMuted)))
+            .background((error ? Color(.danger) : busy ? Color(.warn) : .secondary).opacity(0.12), in: .capsule)
     }
 }

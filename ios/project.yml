@@ -21,6 +21,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: ai.3mi.tally
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES # Color(.paper), Image(.kirokuMark)
         GENERATE_INFOPLIST_FILE: YES
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: "1.0"
@@ -31,7 +33,7 @@ targets:
         CFBundleDevelopmentRegion: zh-Hant
         NSMicrophoneUsageDescription: Kiroku 需要使用麥克風來錄音。
         UIBackgroundModes: [audio]
-        UILaunchScreen: {}
+        UILaunchScreen: {UIColorName: Paper} # brand ivory / ink navy, matches the first screen
         ITSAppUsesNonExemptEncryption: false
         # tally:// links: recordings, views, folders, trash, 問問看 (see DeepLink)
         CFBundleURLTypes: [{CFBundleURLName: ai.3mi.tally, CFBundleURLSchemes: [tally]}]

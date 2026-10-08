@@ -56,6 +56,8 @@ struct DetailView: View {
                 ProgressView()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.paper))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .task {
@@ -289,37 +291,41 @@ struct TranscriptView: View {
     var body: some View {
         ScrollViewReader { proxy in
             List {
-                if Status.busy(detail.recording.status) || detail.recording.status == "error" {
-                    Section { notice }
-                }
-                if detail.segments.isEmpty {
-                    Text(Status.busy(detail.recording.status) ? "逐字稿產生中…" : "沒有逐字稿內容。")
-                        .foregroundStyle(.secondary).accessibilityIdentifier("transcript.empty")
-                }
-                if !detail.segments.isEmpty {
-                    Section { SpeakerLegend(detail: detail, onDetail: onDetail) }
-                }
-                Section {
-                    ForEach(Array(detail.segments.enumerated()), id: \.element.id) { i, seg in
-                        SegmentRow(index: i, segment: seg, speaker: speaker(seg.speakerId), showRaw: showRaw,
-                                   active: seg.id == activeId, selected: selected?.contains(i) == true,
-                                   onSeek: { if anchor != nil { end = i } else { seek(seg) } }, onRename: { onRename(seg) })
-                            .id(seg.id)
-                            .contextMenu {
-                                Button { anchor = i; end = i } label: { Label("從這句開始選取", systemImage: "text.badge.plus") }
-                                Button { onEdit(seg) } label: { Label("編輯文字", systemImage: "pencil") }
-                                // the web copies a text selection; here: one segment, or from it to the end
-                                Button { onPrompt(i...i) } label: { Label("複製這句為 Prompt", systemImage: "doc.on.doc") }
-                                Button { onPrompt(i...(detail.segments.count - 1)) } label: {
-                                    Label("從這句到結尾複製為 Prompt", systemImage: "text.append")
+                Group {
+                    if Status.busy(detail.recording.status) || detail.recording.status == "error" {
+                        Section { notice }
+                    }
+                    if detail.segments.isEmpty {
+                        Text(Status.busy(detail.recording.status) ? "逐字稿產生中…" : "沒有逐字稿內容。")
+                            .foregroundStyle(Color(.inkMuted)).accessibilityIdentifier("transcript.empty")
+                    }
+                    if !detail.segments.isEmpty {
+                        Section { SpeakerLegend(detail: detail, onDetail: onDetail) }
+                    }
+                    Section {
+                        ForEach(Array(detail.segments.enumerated()), id: \.element.id) { i, seg in
+                            SegmentRow(index: i, segment: seg, speaker: speaker(seg.speakerId), showRaw: showRaw,
+                                       active: seg.id == activeId, selected: selected?.contains(i) == true,
+                                       onSeek: { if anchor != nil { end = i } else { seek(seg) } }, onRename: { onRename(seg) })
+                                .id(seg.id)
+                                .contextMenu {
+                                    Button { anchor = i; end = i } label: { Label("從這句開始選取", systemImage: "text.badge.plus") }
+                                    Button { onEdit(seg) } label: { Label("編輯文字", systemImage: "pencil") }
+                                    // the web copies a text selection; here: one segment, or from it to the end
+                                    Button { onPrompt(i...i) } label: { Label("複製這句為 Prompt", systemImage: "doc.on.doc") }
+                                    Button { onPrompt(i...(detail.segments.count - 1)) } label: {
+                                        Label("從這句到結尾複製為 Prompt", systemImage: "text.append")
+                                    }
+                                    Button { UIPasteboard.general.string = showRaw ? seg.textRaw : (seg.textClean ?? seg.textRaw) } label: {
+                                        Label("複製文字", systemImage: "doc.on.clipboard")
+                                    }
                                 }
-                                Button { UIPasteboard.general.string = showRaw ? seg.textRaw : (seg.textClean ?? seg.textRaw) } label: {
-                                    Label("複製文字", systemImage: "doc.on.clipboard")
-                                }
-                            }
+                        }
                     }
                 }
+                .kirokuRows()
             }
+            .kirokuList()
             .listStyle(.plain)
             .safeAreaInset(edge: .bottom) { if let selected { selectionBar(selected) } }
             .onChange(of: detail.segments.count) { anchor = nil; end = nil }
@@ -335,7 +341,7 @@ struct TranscriptView: View {
         let span = segs.indices.contains(r.upperBound)
             ? Prompt.fmtDur(Double(segs[r.lowerBound].startMs) / 1000) + "–" + Prompt.fmtDur(Double(segs[r.upperBound].endMs) / 1000) : ""
         return VStack(alignment: .leading, spacing: 6) {
-            Text("已選 \(r.count) 句（\(span)）· 點其他句子調整範圍").font(.caption).foregroundStyle(.secondary)
+            Text("已選 \(r.count) 句（\(span)）· 點其他句子調整範圍").font(.caption).foregroundStyle(Color(.inkMuted))
                 .accessibilityIdentifier("selection.info")
             HStack {
                 Button("取消") { anchor = nil; end = nil }.accessibilityIdentifier("selection.cancel")
@@ -358,7 +364,7 @@ struct TranscriptView: View {
             : "處理中：\(Status.label(r.status))…（完成後會自動更新）"
         return Label(text,
                      systemImage: r.status == "error" ? "exclamationmark.triangle" : "hourglass")
-            .foregroundStyle(r.status == "error" ? .red : .orange)
+            .foregroundStyle(r.status == "error" ? Color(.danger) : Color(.warn))
     }
 
     private func speaker(_ id: Int?) -> Speaker? { id.flatMap { sid in detail.speakers.first { $0.id == sid } } }
@@ -389,11 +395,11 @@ struct SpeakerLegend: View {
                 HStack(spacing: 6) {
                     Circle().fill(SpeakerColor.of(item.id)).frame(width: 8, height: 8).accessibilityHidden(true)
                     Text(sp?.displayName ?? "未知講者").bold()
-                    if sp?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(.secondary) }
+                    if sp?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(Color(.inkMuted)) }
                     if sp?.auto == 1 { Badge(text: "自動") }
-                    Text("\(Int((Double(item.ms) / Double(total) * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
+                    Text("\(Int((Double(item.ms) / Double(total) * 100).rounded()))%").monospacedDigit().foregroundStyle(Color(.inkMuted))
                     if let sp, let sug = sp.suggest {
-                        Text("可能是 \(sug.name)？").font(.callout).foregroundStyle(.orange)
+                        Text("可能是 \(sug.name)？").font(.callout).foregroundStyle(Color(.warn))
                         Button { decide(sp, name: sug.name) } label: { Image(systemName: "checkmark.circle.fill") }
                             .accessibilityLabel("確認是 \(sug.name)")
                         Button { decide(sp, name: sp.displayName) } label: { Image(systemName: "xmark.circle") }
@@ -431,7 +437,7 @@ struct SpeakerLegend: View {
 }
 
 enum SpeakerColor {
-    static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .brown, .indigo]
+    static let palette: [Color] = [.speaker1, .speaker2, .speaker3, .speaker4, .speaker5, .speaker6, .speaker7, .speaker8]
     static func of(_ id: Int?) -> Color { id.map { palette[$0 % palette.count] } ?? .gray }
 }
 
@@ -451,12 +457,12 @@ struct SegmentRow: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Button(action: onSeek) { Text(Prompt.fmtDur(Double(segment.startMs) / 1000)).monospacedDigit() }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(.inkMuted))
                     .accessibilityLabel("從 \(Prompt.fmtDur(Double(segment.startMs) / 1000)) 播放")
                 Button(action: onRename) {
                     HStack(spacing: 4) {
                         Text(name).bold().foregroundStyle(SpeakerColor.of(segment.speakerId))
-                        if speaker?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(.secondary) }
+                        if speaker?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(Color(.inkMuted)) }
                         if speaker?.auto == 1 { Badge(text: "自動") }
                     }
                 }
@@ -474,7 +480,7 @@ struct SegmentRow: View {
                 .accessibilityIdentifier("segment.\(index).text")
         }
         .padding(.vertical, 4)
-        .listRowBackground(selected ? Color.accentColor.opacity(0.28) : active ? Color.accentColor.opacity(0.15) : nil)
+        .listRowBackground(selected ? Color.accentColor.opacity(0.25) : active ? Color(.selection) : Color(.surface))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
@@ -498,25 +504,29 @@ struct SpeakerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("名稱") {
-                    TextField("講者名稱", text: $text).accessibilityIdentifier("rename.name").focused($focused).submitLabel(.done).onSubmit(save)
-                }
-                Section("套用到") {
-                    Picker("套用到", selection: $scope) {
-                        Text("所有段落").tag("all")
-                        Text("只有這段").tag("segment")
+                Group {
+                    Section("名稱") {
+                        TextField("講者名稱", text: $text).accessibilityIdentifier("rename.name").focused($focused).submitLabel(.done).onSubmit(save)
                     }
-                    .pickerStyle(.segmented)
-                    .disabled(segment.speakerId == nil)
-                }
-                Section("最近使用") {
-                    if people.isEmpty { Text("尚無紀錄").foregroundStyle(.secondary) }
-                    ForEach(people, id: \.self) { n in
-                        Button(n) { text = n }
+                    Section("套用到") {
+                        Picker("套用到", selection: $scope) {
+                            Text("所有段落").tag("all")
+                            Text("只有這段").tag("segment")
+                        }
+                        .pickerStyle(.segmented)
+                        .disabled(segment.speakerId == nil)
                     }
+                    Section("最近使用") {
+                        if people.isEmpty { Text("尚無紀錄").foregroundStyle(Color(.inkMuted)) }
+                        ForEach(people, id: \.self) { n in
+                            Button(n) { text = n }
+                        }
+                    }
+                    if let error { Section { Text(error).foregroundStyle(Color(.danger)) } }
                 }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("重新命名講者")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -590,7 +600,7 @@ struct PlayerBar: View {
                     Text("\(player.rate.formatted())×").monospacedDigit()
                 }
                 .accessibilityLabel("播放速度")
-                Text(Prompt.fmtDur(player.duration)).monospacedDigit().foregroundStyle(.secondary)
+                Text(Prompt.fmtDur(player.duration)).monospacedDigit().foregroundStyle(Color(.inkMuted))
             }
             .font(.callout)
             .buttonStyle(.borderless)
@@ -644,49 +654,53 @@ struct SummariesView: View {
 
     var body: some View {
         List {
-            Section("產生新摘要") {
-                if let meta {
-                    Picker("範本", selection: $template) {
-                        ForEach(meta.templates, id: \.id) { Text($0.name).tag($0.id) }
+            Group {
+                Section("產生新摘要") {
+                    if let meta {
+                        Picker("範本", selection: $template) {
+                            ForEach(meta.templates, id: \.id) { Text($0.name).tag($0.id) }
+                        }
+                        Picker("語言", selection: $language) {
+                            ForEach(meta.languages, id: \.id) { Text($0.name).tag($0.id) }
+                        }
                     }
-                    Picker("語言", selection: $language) {
-                        ForEach(meta.languages, id: \.id) { Text($0.name).tag($0.id) }
-                    }
+                    Button("產生摘要", action: generate).disabled(working || detail.recording.status != "done")
+                    if let error { Text(error).foregroundStyle(Color(.danger)) }
                 }
-                Button("產生摘要", action: generate).disabled(working || detail.recording.status != "done")
-                if let error { Text(error).foregroundStyle(.red) }
-            }
-            if detail.summaries.isEmpty {
-                Text("還沒有摘要。").foregroundStyle(.secondary)
-            }
-            ForEach(detail.summaries.sorted { $0.id > $1.id }) { s in
-                Section {
-                    switch s.status {
-                    case "done": MarkdownView(markdown: s.contentMd ?? "")
-                    case "error": Text("錯誤：\(s.error ?? "")").foregroundStyle(.red)
-                    default: Label(s.status == "queued" ? app.queuedText : "產生中，請稍候…", systemImage: "hourglass").foregroundStyle(.orange)
-                    }
-                } header: {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Text(templateName(s.templateId) + " · " + languageName(s.language))
-                                if s.status != "done" { Badge(text: Status.label(s.status), busy: s.status != "error", error: s.status == "error") }
+                if detail.summaries.isEmpty {
+                    Text("還沒有摘要。").foregroundStyle(Color(.inkMuted))
+                }
+                ForEach(detail.summaries.sorted { $0.id > $1.id }) { s in
+                    Section {
+                        switch s.status {
+                        case "done": MarkdownView(markdown: s.contentMd ?? "")
+                        case "error": Text("錯誤：\(s.error ?? "")").foregroundStyle(Color(.danger))
+                        default: Label(s.status == "queued" ? app.queuedText : "產生中，請稍候…", systemImage: "hourglass").foregroundStyle(Color(.warn))
+                        }
+                    } header: {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 6) {
+                                    Text(templateName(s.templateId) + " · " + languageName(s.language))
+                                    if s.status != "done" { Badge(text: Status.label(s.status), busy: s.status != "error", error: s.status == "error") }
+                                }
+                                if let c = s.createdAt { Text(Prompt.fmtDate(c)).font(.caption2).accessibilityIdentifier("summary.\(s.id).date") }
                             }
-                            if let c = s.createdAt { Text(Prompt.fmtDate(c)).font(.caption2).accessibilityIdentifier("summary.\(s.id).date") }
+                            Spacer()
+                            if s.status == "done", let md = s.contentMd {
+                                Button { UIPasteboard.general.string = md } label: { Image(systemName: "doc.on.doc") }
+                                    .accessibilityLabel("複製摘要")
+                            }
+                            Button { deleting = s } label: { Image(systemName: "trash") }
+                                .accessibilityLabel("刪除摘要")
+                                .accessibilityIdentifier("summary.\(s.id).delete")
                         }
-                        Spacer()
-                        if s.status == "done", let md = s.contentMd {
-                            Button { UIPasteboard.general.string = md } label: { Image(systemName: "doc.on.doc") }
-                                .accessibilityLabel("複製摘要")
-                        }
-                        Button { deleting = s } label: { Image(systemName: "trash") }
-                            .accessibilityLabel("刪除摘要")
-                            .accessibilityIdentifier("summary.\(s.id).delete")
                     }
                 }
             }
+            .kirokuRows()
         }
+        .kirokuList()
         .buttonStyle(.borderless)
         .alert("刪除這份摘要？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { s in
             Button("刪除", role: .destructive) { Task { await delete(s) } }
@@ -738,34 +752,38 @@ struct PromptOptionsSheet: View {
         let est = Prompt.estimate(text)
         NavigationStack {
             Form {
-                Section {
-                    Toggle("包含摘要", isOn: $o.summary)
-                    Toggle("包含逐字稿", isOn: $o.transcript)
-                    Toggle("時間戳", isOn: $o.ts)
-                    Toggle("使用原始辨識文字（未整理）", isOn: $o.raw)
-                    Picker("開頭指示語", selection: $o.intro) {
-                        ForEach(Prompt.intros, id: \.key) { Text($0.label).tag($0.key) }
+                Group {
+                    Section {
+                        Toggle("包含摘要", isOn: $o.summary)
+                        Toggle("包含逐字稿", isOn: $o.transcript)
+                        Toggle("時間戳", isOn: $o.ts)
+                        Toggle("使用原始辨識文字（未整理）", isOn: $o.raw)
+                        Picker("開頭指示語", selection: $o.intro) {
+                            ForEach(Prompt.intros, id: \.key) { Text($0.label).tag($0.key) }
+                        }
+                        if o.intro == "custom" {
+                            TextField("例如：請用三點整理重點，並列出我需要追蹤的事。", text: $o.custom, axis: .vertical)
+                                .lineLimit(2...6)
+                                .accessibilityLabel("自訂指示語")
+                        }
+                    } footer: {
+                        Text(Prompt.estimateText(est)).foregroundStyle(est.warn ? AnyShapeStyle(Color(.warn)) : AnyShapeStyle(Color(.inkMuted)))
                     }
-                    if o.intro == "custom" {
-                        TextField("例如：請用三點整理重點，並列出我需要追蹤的事。", text: $o.custom, axis: .vertical)
-                            .lineLimit(2...6)
-                            .accessibilityLabel("自訂指示語")
+                    Section {
+                        Button(copied ? "已複製為 Prompt" : "複製為 Prompt") {
+                            UIPasteboard.general.string = text
+                            copied = true
+                        }
+                        Button("分享 Prompt…") { dismiss(); onShare(ShareItem(items: [text])) }
+                        Button("分享 .md 檔…") { dismiss(); onShare(.file(text, title: detail.recording.title)) }
                     }
-                } footer: {
-                    Text(Prompt.estimateText(est)).foregroundStyle(est.warn ? .orange : .secondary)
-                }
-                Section {
-                    Button(copied ? "已複製為 Prompt" : "複製為 Prompt") {
-                        UIPasteboard.general.string = text
-                        copied = true
+                    Section("預覽") {
+                        Text(text).accessibilityIdentifier("prompt.preview").font(.footnote.monospaced()).textSelection(.enabled)
                     }
-                    Button("分享 Prompt…") { dismiss(); onShare(ShareItem(items: [text])) }
-                    Button("分享 .md 檔…") { dismiss(); onShare(.file(text, title: detail.recording.title)) }
                 }
-                Section("預覽") {
-                    Text(text).accessibilityIdentifier("prompt.preview").font(.footnote.monospaced()).textSelection(.enabled)
-                }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("複製為 Prompt")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
@@ -814,7 +832,7 @@ struct DetailHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Label(folderPath, systemImage: "folder")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.caption).foregroundStyle(Color(.inkMuted))
                 .accessibilityIdentifier("detail.folder")
             if editing {
                 TextField("標題", text: $text)
@@ -834,7 +852,7 @@ struct DetailHeader: View {
                 .accessibilityIdentifier("detail.title")
             }
             if recording.deletedAt != nil {
-                Label("這筆錄音在垃圾桶中。", systemImage: "trash").font(.callout).foregroundStyle(.orange)
+                Label("這筆錄音在垃圾桶中。", systemImage: "trash").font(.callout).foregroundStyle(Color(.warn))
                     .accessibilityIdentifier("detail.trashed")
             }
         }
@@ -876,11 +894,15 @@ struct SegmentEditSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                TextField("逐字稿文字", text: $text, axis: .vertical)
-                    .lineLimit(3...12)
-                    .focused($focused)
-                    .accessibilityIdentifier("segment.edit.text")
+                Group {
+                    TextField("逐字稿文字", text: $text, axis: .vertical)
+                        .lineLimit(3...12)
+                        .focused($focused)
+                        .accessibilityIdentifier("segment.edit.text")
+                }
+                .kirokuRows()
             }
+            .kirokuList()
             .navigationTitle("編輯文字")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

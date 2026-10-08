@@ -13,9 +13,11 @@ struct TallyApp: App {
                 case .main: LibraryView()
                 }
             }
+            .modifier(ToastOverlay())
             .environment(app)
             .task { app.uploads.kick() } // also adopts recordings left over from a killed session
             .onChange(of: scenePhase) { _, phase in if phase == .active { app.uploads.kick() } }
+            .onOpenURL { url in if let l = DeepLink(url) { app.link = l } } // tally:// links (web: hash routes)
         }
     }
 }
@@ -103,49 +105,11 @@ struct ConnectView: View {
 
 extension URL: @retroactive Identifiable { public var id: String { absoluteString } }
 
-struct SettingsView: View {
-    @Environment(AppModel.self) private var app
-    @Environment(\.dismiss) private var dismiss
-    @State private var confirmChange = false
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section("後端") {
-                    LabeledContent("網址", value: app.baseURL?.absoluteString ?? "—")
-                    LabeledContent("登入", value: app.token != nil ? "Cloudflare Access" : (app.extraHeaders.isEmpty ? "不需要登入" : "Service token（測試）"))
-                    Button("變更後端…") { confirmChange = true }
-                    if app.token != nil {
-                        Button("登出", role: .destructive) { Task { await app.logout(); dismiss() } }
-                    }
-                }
-                Section {
-                    LabeledContent("等待上傳", value: "\(app.uploads.items.count)")
-                    if !app.uploads.items.isEmpty { Button("立即重試上傳") { app.uploads.retryNow() } }
-                } header: {
-                    Text("上傳")
-                } footer: {
-                    Text("錄音會保留在手機上，直到上傳完成。")
-                }
-                Section {
-                    LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
-                }
-            }
-            .navigationTitle("設定")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
-            .confirmationDialog("變更後端會登出目前的帳號。尚未上傳的錄音會上傳到新的後端。", isPresented: $confirmChange, titleVisibility: .visible) {
-                Button("變更後端", role: .destructive) { Task { await app.changeBackend() } }
-            }
-        }
-    }
-}
-
 struct RunnersView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
-    @State private var data: Runners?
     @State private var error: String?
+    private var data: Runners? { app.runners }
 
     var body: some View {
         NavigationStack {
@@ -163,12 +127,8 @@ struct RunnersView: View {
                         if runners.isEmpty { Text("還沒有 runner 連線過。").foregroundStyle(.secondary) }
                         let latest = Self.latestBuild(runners)
                         ForEach(runners, id: \.name) { r in
-                            RunnerRow(runner: r, latest: latest)
-                                .swipeActions {
-                                    if !r.online {
-                                        Button("移除", role: .destructive) { Task { await remove(r) } }
-                                    }
-                                }
+                            // only an offline runner can be removed; it comes back by itself if it connects again
+                            RunnerRow(runner: r, latest: latest, onRemove: r.online ? nil : { Task { await remove(r) } })
                         }
                     } else if let error {
                         Text(error).foregroundStyle(.red)
@@ -191,13 +151,13 @@ struct RunnersView: View {
     }
 
     private func load() async {
-        do { data = try await app.get("api/runners"); error = nil } catch { self.error = error.localizedDescription }
+        do { app.runners = try await app.get("api/runners"); error = nil } catch { self.error = error.localizedDescription }
     }
 
     private func remove(_ r: Runners.Runner) async {
         do {
             let _: Ignored = try await app.json("DELETE", "api/runners/\(r.name.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(["/"])) ?? r.name)")
-            data?.runners.removeAll { $0.name == r.name }
+            app.runners?.runners.removeAll { $0.name == r.name }
         } catch { self.error = error.localizedDescription }
     }
 
@@ -210,8 +170,23 @@ struct RunnersView: View {
 private struct RunnerRow: View {
     let runner: Runners.Runner
     let latest: String?
+    let onRemove: (() -> Void)?
 
     var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            info
+            Spacer(minLength: 0)
+            if let onRemove {
+                Button(action: onRemove) { Image(systemName: "xmark.circle") }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("移除 \(runner.name)")
+                    .accessibilityHint("從清單移除（重新連線時會自動出現）")
+                    .accessibilityIdentifier("runner.remove.\(runner.name)")
+            }
+        }
+    }
+
+    private var info: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Circle().fill(runner.online ? .green : .gray).frame(width: 9, height: 9)
                 .accessibilityHidden(true)

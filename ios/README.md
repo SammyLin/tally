@@ -1,6 +1,15 @@
 # Tally for iOS
 
-SwiftUI app (iOS 17+, no dependencies) for the Tally backend: record (keeps going in the background and when the screen is locked), queue uploads (multipart, 50 MiB parts, retried until they succeed), browse and play recordings, rename speakers, read summaries, and "copy as prompt" (same format as the web's `buildPrompt`).
+SwiftUI app (iOS 17+, no dependencies) for the Tally backend. Features (same API as the web front end):
+
+- **Record**: keeps recording in the background and with the screen locked. You choose a title, folder and transcription language when you save.
+- **Upload queue**: multipart uploads in 50 MiB parts, retried until they succeed. Queued items can be deleted (asks first). You can also import audio/video files with a chosen language.
+- **Library**: 最近 / 全部 / 未分類 / 垃圾桶 and folders (create, subfolder, rename, move, delete), search, and a runner status header (online, queue size, remove offline runners).
+- **Recording detail**: play and seek (up to 1.75×), speaker bands and legend, rename or merge speakers, confirm or reject a suggested speaker, edit a transcript line (asks before discarding edits), rename, move, retranscribe with a language, trash / restore / purge.
+- **Summary**: Markdown rendering, delete. **Copy as prompt** uses the same format as the web's `buildPrompt`, for a whole recording or a selected range.
+- **問問看**: ask questions across recordings, answers cite recordings and jump to that time. Retry or delete questions.
+- **Settings**: AI text, default language, vocabulary (with suggestions and a 50-character limit; a rejected word keeps the sheet open), 我是誰, rename / merge / delete people, and change backend. Unsaved changes are guarded.
+- **`tally://` links**: see Links below.
 
 ## Build and run
 
@@ -14,13 +23,26 @@ xcodebuild -scheme Tally -destination 'platform=iOS Simulator,name=iPhone 17' -d
 xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/Tally.app
 ```
 
-Unit tests: `xcodebuild test -scheme Tally -destination 'platform=iOS Simulator,name=iPhone 17'`.
+## Tests
 
-On first launch the app asks for the backend URL (default `https://records.3mi.ai`). For a local Worker, use `http://127.0.0.1:<port>`; plain http is allowed only for local and LAN addresses.
+Unit tests (Swift Testing, `TallyTests/`: prompt format, upload parts and backoff, Access login, library, knowledge, parity):
 
-## Maestro UI tests
+```sh
+cd ios && /opt/homebrew/bin/xcodegen
+xcodebuild test -scheme Tally -destination 'platform=iOS Simulator,name=iPhone 17'
+```
 
-`maestro test ios/maestro` runs the flows in `ios/maestro` against the booted simulator. They need a local Worker on 127.0.0.1:8795 without Access, a seeded recording, and a Debug build installed. See [maestro/README.md](maestro/README.md) for the setup steps and the `-e BACKEND=… -e SHOTS=…` options.
+On first launch the app asks for the backend URL (default `https://records.3mi.ai`). For a local Worker, use `http://127.0.0.1:<port>`. Plain http is allowed only for local and LAN addresses.
+
+### Maestro UI tests
+
+`maestro test ios/maestro -e BACKEND=http://127.0.0.1:<port>` runs all 12 flows in `ios/maestro` against the booted simulator. They need a local Worker without Access, a freshly seeded database (`ios/maestro/seed-all.sh`) and a Debug build installed. Flows 07–12 change their data, so each full run needs a fresh database. See [maestro/README.md](maestro/README.md) for setup steps and the `-e BACKEND=… -e SHOTS=…` options.
+
+## Links
+
+`tally://` opens the app at the same places as the web's hash routes: `tally://recent|all|unfiled|trash|folder/<id>`, optionally
+followed by `/rec/<id>[/summary]` (or just `tally://rec/<id>[/summary][?ms=<ms>]`), and `tally://ask[/<id>]`. Detail ⋯ →
+「複製連結」 copies one. Links wait while a recording or the settings sheet is open.
 
 ## Login (Cloudflare Access)
 

@@ -3,30 +3,59 @@ import UIKit
 
 struct DetailView: View {
     let id: Int
+    /// Opened from an Ask citation: play from here once the player exists (web: S.seek).
+    var seekMs: Int? = nil
+    /// Opened on the 摘要 tab (tally://rec/<id>/summary, web: #/…/rec/<id>/summary).
+    var summary = false
 
     @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
     @State private var detail: Detail?
+    @State private var folders: [Folder] = []
+    @State private var notFound = false
+    @State private var showRetranscribe = false
+    @State private var showMove = false
+    @State private var confirmPurge = false
+    @State private var editing: Segment?
     @State private var meta: Templates?
     @State private var player: Player?
-    @State private var tab = 0
+    @State private var tab: Int
     @State private var showRaw = false
     @State private var error: String?
     @State private var renaming: Segment?
     @State private var showPromptOptions = false
     @State private var share: ShareItem?
-    @State private var toast: String?
+    @State private var sought = false
+
+    init(id: Int, seekMs: Int? = nil, summary: Bool = false) {
+        self.id = id
+        self.seekMs = seekMs
+        self.summary = summary
+        _tab = State(initialValue: summary && seekMs == nil ? 1 : 0)
+    }
 
     var body: some View {
         Group {
             if let detail {
                 content(detail)
+            } else if notFound {
+                ContentUnavailableView {
+                    Label("找不到這筆錄音。", systemImage: "questionmark.folder")
+                } actions: {
+                    Button("回到清單") { dismiss() }
+                }
             } else if let error {
-                ContentUnavailableView("無法載入", systemImage: "exclamationmark.triangle", description: Text(error))
+                ContentUnavailableView {
+                    Label("無法載入", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(error)
+                } actions: {
+                    Button("重試") { Task { await load() } }.buttonStyle(.borderedProminent)
+                }
             } else {
                 ProgressView()
             }
         }
-        .navigationTitle(detail?.recording.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbar }
         .task {
@@ -45,14 +74,28 @@ struct DetailView: View {
             if let detail { PromptOptionsSheet(detail: detail, templates: meta?.templates ?? [], origin: app.origin) { share = $0 } }
         }
         .sheet(item: $share) { ActivityView(items: $0.items) }
-        .overlay(alignment: .top) {
-            if let toast {
-                Text(toast).font(.callout).padding(.horizontal, 14).padding(.vertical, 8)
-                    .background(.regularMaterial, in: .capsule).padding(.top, 8)
-                    .accessibilityIdentifier("detail.toast")
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .task { try? await Task.sleep(for: .seconds(2.5)); withAnimation { self.toast = nil } }
+        .sheet(item: $editing) { seg in
+            SegmentEditSheet(segment: seg, text: showRaw ? seg.textRaw : (seg.textClean ?? seg.textRaw)) { saved in
+                if let i = detail?.segments.firstIndex(where: { $0.id == saved.id }) { detail?.segments[i] = saved }
+                showRaw = false
+                app.toast = "已儲存"
             }
+        }
+        .sheet(isPresented: $showRetranscribe) {
+            if let r = detail?.recording {
+                LanguageSheet(title: "重新轉錄", note: "會覆蓋目前的逐字稿與講者名稱。", okLabel: "重新轉錄",
+                              initial: r.language ?? app.sttLang) { lang in Task { await retranscribe(lang) } }
+            }
+        }
+        .sheet(isPresented: $showMove) {
+            if let r = detail?.recording {
+                FolderPicker(title: "移動「\(r.title)」到", rootLabel: "未分類", folders: folders, current: r.folderId) { fid in
+                    Task { await move(to: fid) }
+                }
+            }
+        }
+        .alert("永久刪除「\(detail?.recording.title ?? "")」？此動作無法復原。", isPresented: $confirmPurge) {
+            Button("永久刪除", role: .destructive) { Task { await purge() } }
         }
     }
 
@@ -65,15 +108,77 @@ struct DetailView: View {
         do {
             let d: Detail = try await app.get("api/recordings/\(id)")
             detail = d
+            notFound = false
             if meta == nil { meta = try? await app.get("api/templates") }
-            if player == nil, d.recording.status == "done", let b = app.backend {
+            if let fs: [Folder] = try? await app.get("api/folders") { folders = fs }
+            // play.m4a is uploaded mid-pipeline: the player shows as soon as it exists (web: play_key)
+            if player == nil, d.recording.playKey != nil || d.recording.status == "done", let b = app.backend {
                 player = Player(url: b.base.appending(path: "media/\(id)"), backend: b, fallbackDuration: d.recording.durationS)
+            }
+            if let ms = seekMs, !sought, let player {
+                sought = true
+                tab = 0
+                player.seek(Double(ms) / 1000, play: true)
             }
             error = nil
         } catch is CancellationError {
+        } catch APIError.http(404, _) {
+            detail = nil
+            notFound = true
         } catch {
             if detail == nil { self.error = error.localizedDescription }
         }
+    }
+
+    // MARK: Recording actions (web: the detail ⋯ menu)
+
+    private func rename(_ title: String) async {
+        do {
+            let r: Recording = try await app.json("PATCH", "api/recordings/\(id)", ["title": title])
+            detail?.recording.title = r.title
+        } catch { app.fail(error) }
+    }
+
+    private func retranscribe(_ language: String) async {
+        do {
+            let _: Recording = try await app.json("POST", "api/recordings/\(id)/retranscribe", ["language": language])
+            app.toast = "已排入重新轉錄"
+            tab = 0
+            await load()
+        } catch { app.fail(error) }
+    }
+
+    private func move(to folder: Int?) async {
+        guard folder != detail?.recording.folderId else { return }
+        do {
+            let _: Recording = try await app.json("PATCH", "api/recordings/\(id)", ["folder_id": folder])
+            detail?.recording.folderId = folder
+            app.toast = "已移到「\(folder.flatMap { f in folders.first { $0.id == f }?.name } ?? "未分類")」"
+        } catch { app.fail(error) }
+    }
+
+    private func trash() async {
+        do {
+            let _: Ignored = try await app.json("DELETE", "api/recordings/\(id)")
+            app.toast = "已移到垃圾桶"
+            dismiss()
+        } catch { app.fail(error) }
+    }
+
+    private func restore() async {
+        do {
+            let _: Recording = try await app.json("POST", "api/recordings/\(id)/restore")
+            app.toast = "已還原"
+            await load()
+        } catch { app.fail(error) }
+    }
+
+    private func purge() async {
+        do {
+            let _: Ignored = try await app.json("DELETE", "api/recordings/\(id)", query: [URLQueryItem(name: "purge", value: "1")])
+            app.toast = "已永久刪除"
+            dismiss()
+        } catch { app.fail(error) }
     }
 
     private func name(_ speakerId: Int?, in d: Detail) -> String {
@@ -81,36 +186,63 @@ struct DetailView: View {
     }
 
     @ViewBuilder private func content(_ d: Detail) -> some View {
+        // while processing only the transcript tab exists (web)
+        let ready = d.recording.status == "done"
         VStack(spacing: 0) {
-            Picker("檢視", selection: $tab) {
-                Text("逐字稿").tag(0)
-                Text("摘要").tag(1)
+            DetailHeader(recording: d.recording, folderPath: FolderTree.path(d.recording.folderId, in: folders)) { t in
+                Task { await rename(t) }
             }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            if tab == 0 {
+            if ready {
+                Picker("檢視", selection: $tab) {
+                    Text("逐字稿").tag(0)
+                    Text("摘要").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
+            if tab == 0 || !ready {
                 TranscriptView(detail: d, player: player, showRaw: showRaw, onRename: { renaming = $0 }, onDetail: { detail = $0 },
-                               onPrompt: { copyPrompt(range: $0) })
+                               onPrompt: { copyPrompt(range: $0) }, onEdit: { editing = $0 })
             } else {
                 SummariesView(detail: d, meta: meta, onChange: { Task { await load() } })
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if let player { PlayerBar(player: player) }
+            if let player { PlayerBar(player: player, segments: d.segments) }
         }
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button { copyPrompt() } label: { Label("複製為 Prompt", systemImage: "doc.on.doc") }
-                Button { sharePrompt(asFile: false) } label: { Label("分享 Prompt…", systemImage: "square.and.arrow.up") }
-                Button { sharePrompt(asFile: true) } label: { Label("分享 .md 檔…", systemImage: "doc.richtext") }
-                Button { showPromptOptions = true } label: { Label("Prompt 選項與預覽…", systemImage: "slider.horizontal.3") }
-                if detail?.segments.contains(where: { $0.textClean != nil }) == true {
-                    Divider()
-                    Toggle("檢視原始逐字稿", isOn: $showRaw)
+                if let r = detail?.recording {
+                    if r.deletedAt != nil {
+                        Button { Task { await restore() } } label: { Label("還原", systemImage: "arrow.uturn.backward") }
+                        Button(role: .destructive) { confirmPurge = true } label: { Label("永久刪除", systemImage: "trash.slash") }
+                    } else {
+                        // actions follow the recording's state: while it is processing only filing/trash make sense
+                        if r.status == "done" {
+                            Button { copyPrompt() } label: { Label("複製為 Prompt", systemImage: "doc.on.doc") }
+                            Button { sharePrompt(asFile: false) } label: { Label("分享 Prompt…", systemImage: "square.and.arrow.up") }
+                            Button { sharePrompt(asFile: true) } label: { Label("分享 .md 檔…", systemImage: "doc.richtext") }
+                            Button { showPromptOptions = true } label: { Label("Prompt 選項與預覽…", systemImage: "slider.horizontal.3") }
+                            Divider()
+                        }
+                        if !Status.busy(r.status) {
+                            Button { showRetranscribe = true } label: { Label("重新轉錄", systemImage: "waveform.badge.magnifyingglass") }
+                        }
+                        Button { showMove = true } label: { Label("移到資料夾…", systemImage: "folder") }
+                        Button(role: .destructive) { Task { await trash() } } label: { Label("移到垃圾桶", systemImage: "trash") }
+                    }
+                    Button {
+                        UIPasteboard.general.string = DeepLink.recording(r.id, summary: tab == 1)
+                        app.toast = "已複製連結"
+                    } label: { Label("複製連結", systemImage: "link") }
+                    if detail?.segments.contains(where: { $0.textClean != nil }) == true {
+                        Divider()
+                        Toggle("檢視原始逐字稿", isOn: $showRaw)
+                    }
                 }
             } label: {
                 Label("更多", systemImage: "ellipsis.circle")
@@ -128,7 +260,7 @@ struct DetailView: View {
     private func copyPrompt(range: ClosedRange<Int>? = nil) {
         guard let t = promptText(range: range) else { return }
         UIPasteboard.general.string = t
-        withAnimation { toast = "已複製為 Prompt（\(Prompt.estimateText(Prompt.estimate(t)).components(separatedBy: "　")[0])）" }
+        withAnimation { app.toast = "已複製為 Prompt（\(Prompt.estimateText(Prompt.estimate(t)).components(separatedBy: "　")[0])）" }
     }
 
     private func sharePrompt(asFile: Bool) {
@@ -140,12 +272,19 @@ struct DetailView: View {
 // MARK: - Transcript
 
 struct TranscriptView: View {
+    @Environment(AppModel.self) private var app
     let detail: Detail
     let player: Player?
     let showRaw: Bool
     let onRename: (Segment) -> Void
     let onDetail: (Detail) -> Void
     let onPrompt: (ClosedRange<Int>) -> Void
+    let onEdit: (Segment) -> Void
+
+    /// Range selection (web: select text → 「複製這段為 Prompt」): long-press starts it, tapping another line moves its end.
+    @State private var anchor: Int?
+    @State private var end: Int?
+    private var selected: ClosedRange<Int>? { anchor.map { a in min(a, end ?? a)...max(a, end ?? a) } }
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -153,15 +292,22 @@ struct TranscriptView: View {
                 if Status.busy(detail.recording.status) || detail.recording.status == "error" {
                     Section { notice }
                 }
+                if detail.segments.isEmpty {
+                    Text(Status.busy(detail.recording.status) ? "逐字稿產生中…" : "沒有逐字稿內容。")
+                        .foregroundStyle(.secondary).accessibilityIdentifier("transcript.empty")
+                }
                 if !detail.segments.isEmpty {
                     Section { SpeakerLegend(detail: detail, onDetail: onDetail) }
                 }
                 Section {
                     ForEach(Array(detail.segments.enumerated()), id: \.element.id) { i, seg in
                         SegmentRow(index: i, segment: seg, speaker: speaker(seg.speakerId), showRaw: showRaw,
-                                   active: seg.id == activeId, onSeek: { seek(seg) }, onRename: { onRename(seg) })
+                                   active: seg.id == activeId, selected: selected?.contains(i) == true,
+                                   onSeek: { if anchor != nil { end = i } else { seek(seg) } }, onRename: { onRename(seg) })
                             .id(seg.id)
                             .contextMenu {
+                                Button { anchor = i; end = i } label: { Label("從這句開始選取", systemImage: "text.badge.plus") }
+                                Button { onEdit(seg) } label: { Label("編輯文字", systemImage: "pencil") }
                                 // the web copies a text selection; here: one segment, or from it to the end
                                 Button { onPrompt(i...i) } label: { Label("複製這句為 Prompt", systemImage: "doc.on.doc") }
                                 Button { onPrompt(i...(detail.segments.count - 1)) } label: {
@@ -175,6 +321,8 @@ struct TranscriptView: View {
                 }
             }
             .listStyle(.plain)
+            .safeAreaInset(edge: .bottom) { if let selected { selectionBar(selected) } }
+            .onChange(of: detail.segments.count) { anchor = nil; end = nil }
             .onChange(of: activeId) { _, id in
                 guard let id, player?.isPlaying == true else { return }
                 withAnimation { proxy.scrollTo(id, anchor: .center) }
@@ -182,9 +330,33 @@ struct TranscriptView: View {
         }
     }
 
+    private func selectionBar(_ r: ClosedRange<Int>) -> some View {
+        let segs = detail.segments
+        let span = segs.indices.contains(r.upperBound)
+            ? Prompt.fmtDur(Double(segs[r.lowerBound].startMs) / 1000) + "–" + Prompt.fmtDur(Double(segs[r.upperBound].endMs) / 1000) : ""
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("已選 \(r.count) 句（\(span)）· 點其他句子調整範圍").font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("selection.info")
+            HStack {
+                Button("取消") { anchor = nil; end = nil }.accessibilityIdentifier("selection.cancel")
+                Spacer()
+                Button { onPrompt(r); anchor = nil; end = nil } label: { Label("複製這段為 Prompt", systemImage: "doc.on.doc") }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("selection.copy")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
     private var notice: some View {
         let r = detail.recording
-        return Label(r.status == "error" ? "處理失敗：\(r.error ?? "")" : "處理中：\(Status.label(r.status))…（完成後會自動更新）",
+        let text = r.status == "error" ? "處理失敗：\(r.error ?? "未知錯誤")"
+            : r.status == "queued" && r.note != nil ? "排隊中：\(r.note!)\(r.notBefore.map { "，預計 " + Prompt.fmtDate($0) + " 後繼續" } ?? "")。"
+            : r.status == "queued" && app.noRunner ? "排隊中。" + AppModel.noRunnerText
+            : "處理中：\(Status.label(r.status))…（完成後會自動更新）"
+        return Label(text,
                      systemImage: r.status == "error" ? "exclamationmark.triangle" : "hourglass")
             .foregroundStyle(r.status == "error" ? .red : .orange)
     }
@@ -217,6 +389,7 @@ struct SpeakerLegend: View {
                 HStack(spacing: 6) {
                     Circle().fill(SpeakerColor.of(item.id)).frame(width: 8, height: 8).accessibilityHidden(true)
                     Text(sp?.displayName ?? "未知講者").bold()
+                    if sp?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(.secondary) }
                     if sp?.auto == 1 { Badge(text: "自動") }
                     Text("\(Int((Double(item.ms) / Double(total) * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary)
                     if let sp, let sug = sp.suggest {
@@ -249,7 +422,10 @@ struct SpeakerLegend: View {
         deciding = true
         Task {
             defer { deciding = false }
-            if let d: Detail = try? await app.json("POST", "api/segments/\(seg.id)/speaker", ["name": name, "scope": "all"]) { onDetail(d) }
+            do {
+                let d: Detail = try await app.json("POST", "api/segments/\(seg.id)/speaker", ["name": name, "scope": "all"])
+                onDetail(d)
+            } catch { app.fail(error) }
         }
     }
 }
@@ -260,11 +436,13 @@ enum SpeakerColor {
 }
 
 struct SegmentRow: View {
+    @Environment(AppModel.self) private var app
     let index: Int
     let segment: Segment
     let speaker: Speaker?
     let showRaw: Bool
     let active: Bool
+    var selected = false
     let onSeek: () -> Void
     let onRename: () -> Void
 
@@ -278,10 +456,11 @@ struct SegmentRow: View {
                 Button(action: onRename) {
                     HStack(spacing: 4) {
                         Text(name).bold().foregroundStyle(SpeakerColor.of(segment.speakerId))
+                        if speaker?.isMe(app.settings.me) == true { Text("（我）").foregroundStyle(.secondary) }
                         if speaker?.auto == 1 { Badge(text: "自動") }
                     }
                 }
-                .accessibilityLabel("講者：\(name)\(speaker?.auto == 1 ? "（依聲紋自動辨識）" : "")，點擊重新命名")
+                .accessibilityLabel("講者：\(name)\(speaker?.isMe(app.settings.me) == true ? "（我）" : "")\(speaker?.auto == 1 ? "（依聲紋自動辨識）" : "")，點擊重新命名")
                 .accessibilityIdentifier("segment.\(index).speaker")
             }
             .font(.subheadline)
@@ -295,7 +474,8 @@ struct SegmentRow: View {
                 .accessibilityIdentifier("segment.\(index).text")
         }
         .padding(.vertical, 4)
-        .listRowBackground(active ? Color.accentColor.opacity(0.15) : nil)
+        .listRowBackground(selected ? Color.accentColor.opacity(0.28) : active ? Color.accentColor.opacity(0.15) : nil)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -376,10 +556,15 @@ struct SpeakerSheet: View {
 
 struct PlayerBar: View {
     @Bindable var player: Player
+    var segments: [Segment] = []
     @State private var scrub: Double?
 
     var body: some View {
         VStack(spacing: 6) {
+            if !segments.isEmpty {
+                SpeakerBands(segments: segments, duration: player.duration, time: scrub ?? player.time)
+                    .padding(.horizontal, 2)
+            }
             Slider(value: Binding(get: { scrub ?? player.time }, set: { scrub = $0 }), in: 0...max(1, player.duration)) { editing in
                 if !editing, let s = scrub { player.seek(s); scrub = nil }
             }
@@ -399,7 +584,7 @@ struct PlayerBar: View {
                 Spacer()
                 Menu {
                     Picker("速度", selection: $player.rate) {
-                        ForEach([Float(0.75), 1, 1.25, 1.5, 2], id: \.self) { Text("\($0.formatted())×").tag($0) }
+                        ForEach([Float(0.75), 1, 1.25, 1.5, 1.75, 2], id: \.self) { Text("\($0.formatted())×").tag($0) }
                     }
                 } label: {
                     Text("\(player.rate.formatted())×").monospacedDigit()
@@ -416,6 +601,33 @@ struct PlayerBar: View {
     }
 }
 
+/// Speaker turns along the timeline (web: .bands): faint ahead of the playhead, solid behind it.
+struct SpeakerBands: View {
+    let segments: [Segment]
+    let duration: Double
+    let time: Double
+
+    var body: some View {
+        Canvas { ctx, size in
+            let d = duration > 0 ? duration : Double(segments.last?.endMs ?? 0) / 1000
+            guard d > 0 else { return }
+            let x = { (ms: Int) in CGFloat(Double(ms) / 1000 / d) * size.width }
+            ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 3), with: .color(.secondary.opacity(0.12)))
+            for (played, opacity) in [(false, 0.28), (true, 1.0)] {
+                var c = ctx
+                if played { c.clip(to: Path(CGRect(x: 0, y: 0, width: CGFloat(min(1, time / d)) * size.width, height: size.height))) }
+                for s in segments {
+                    let rect = CGRect(x: x(s.startMs), y: 0, width: max(size.width * 0.0015, x(s.endMs) - x(s.startMs)), height: size.height)
+                    c.fill(Path(rect), with: .color(SpeakerColor.of(s.speakerId).opacity(opacity)))
+                }
+            }
+        }
+        .frame(height: 6)
+        .clipShape(.rect(cornerRadius: 3))
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Summaries
 
 struct SummariesView: View {
@@ -428,6 +640,7 @@ struct SummariesView: View {
     @State private var language = "zh-TW"
     @State private var working = false
     @State private var error: String?
+    @State private var deleting: Summary?
 
     var body: some View {
         List {
@@ -446,30 +659,51 @@ struct SummariesView: View {
             if detail.summaries.isEmpty {
                 Text("還沒有摘要。").foregroundStyle(.secondary)
             }
-            ForEach(detail.summaries) { s in
+            ForEach(detail.summaries.sorted { $0.id > $1.id }) { s in
                 Section {
                     switch s.status {
                     case "done": MarkdownView(markdown: s.contentMd ?? "")
                     case "error": Text("錯誤：\(s.error ?? "")").foregroundStyle(.red)
-                    default: Label(Status.label(s.status) + "…", systemImage: "hourglass").foregroundStyle(.orange)
+                    default: Label(s.status == "queued" ? app.queuedText : "產生中，請稍候…", systemImage: "hourglass").foregroundStyle(.orange)
                     }
                 } header: {
                     HStack {
-                        Text(templateName(s.templateId) + " · " + languageName(s.language))
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Text(templateName(s.templateId) + " · " + languageName(s.language))
+                                if s.status != "done" { Badge(text: Status.label(s.status), busy: s.status != "error", error: s.status == "error") }
+                            }
+                            if let c = s.createdAt { Text(Prompt.fmtDate(c)).font(.caption2).accessibilityIdentifier("summary.\(s.id).date") }
+                        }
                         Spacer()
                         if s.status == "done", let md = s.contentMd {
                             Button { UIPasteboard.general.string = md } label: { Image(systemName: "doc.on.doc") }
                                 .accessibilityLabel("複製摘要")
                         }
+                        Button { deleting = s } label: { Image(systemName: "trash") }
+                            .accessibilityLabel("刪除摘要")
+                            .accessibilityIdentifier("summary.\(s.id).delete")
                     }
                 }
             }
         }
+        .buttonStyle(.borderless)
+        .alert("刪除這份摘要？", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }), presenting: deleting) { s in
+            Button("刪除", role: .destructive) { Task { await delete(s) } }
+        }
+        .onAppear { language = app.settings.summaryLang } // web: sumLang()
         .onAppear { if let first = meta?.templates.first, !(meta?.templates.contains { $0.id == template } ?? false) { template = first.id } }
     }
 
     private func templateName(_ id: String) -> String { meta?.templates.first { $0.id == id }?.name ?? id }
     private func languageName(_ id: String) -> String { meta?.languages.first { $0.id == id }?.name ?? id }
+
+    private func delete(_ s: Summary) async {
+        do {
+            let _: Ignored = try await app.json("DELETE", "api/summaries/\(s.id)")
+            onChange()
+        } catch { app.fail(error) }
+    }
 
     private func generate() {
         working = true
@@ -484,46 +718,6 @@ struct SummariesView: View {
                 self.error = error.localizedDescription
             }
         }
-    }
-}
-
-/// Line-based Markdown: headings, bullets and paragraphs as blocks; inline styles via AttributedString.
-struct MarkdownView: View {
-    let markdown: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(Array(markdown.components(separatedBy: "\n").enumerated()), id: \.offset) { _, line in
-                block(line)
-            }
-        }
-        .textSelection(.enabled)
-    }
-
-    @ViewBuilder private func block(_ line: String) -> some View {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let hashes = trimmed.prefix { $0 == "#" }.count
-        if trimmed.isEmpty {
-            EmptyView()
-        } else if (1...6).contains(hashes), trimmed.dropFirst(hashes).first == " " {
-            inline(String(trimmed.dropFirst(hashes + 1)))
-                .font(hashes <= 1 ? .title2.bold() : hashes == 2 ? .title3.bold() : .headline)
-                .padding(.top, 4)
-        } else if let marker = ["- ", "* ", "+ "].first(where: { trimmed.hasPrefix($0) }) {
-            let indent = CGFloat(line.prefix { $0 == " " }.count / 2) * 16
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("•")
-                inline(String(trimmed.dropFirst(marker.count)))
-            }
-            .padding(.leading, indent)
-        } else {
-            inline(trimmed)
-        }
-    }
-
-    private func inline(_ s: String) -> Text {
-        let a = (try? AttributedString(markdown: s, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(s)
-        return Text(a)
     }
 }
 
@@ -604,4 +798,120 @@ struct ActivityView: UIViewControllerRepresentable {
         UIActivityViewController(activityItems: items, applicationActivities: nil)
     }
     func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
+}
+
+// MARK: - Header: folder path + title (tap to rename, like the web's d-title)
+
+struct DetailHeader: View {
+    let recording: Recording
+    let folderPath: String
+    let onRename: (String) -> Void
+
+    @State private var editing = false
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Label(folderPath, systemImage: "folder")
+                .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("detail.folder")
+            if editing {
+                TextField("標題", text: $text)
+                    .font(.title3.bold())
+                    .focused($focused)
+                    .submitLabel(.done)
+                    .onSubmit { finish() }
+                    .onChange(of: focused) { _, f in if !f { finish() } } // leaving the field saves, like the web's blur
+                    .onAppear { focused = true }
+                    .accessibilityIdentifier("detail.titleField")
+            } else {
+                Button { text = recording.title; editing = true } label: {
+                    Text(recording.title).font(.title3.bold()).multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("點擊重新命名")
+                .accessibilityIdentifier("detail.title")
+            }
+            if recording.deletedAt != nil {
+                Label("這筆錄音在垃圾桶中。", systemImage: "trash").font(.callout).foregroundStyle(.orange)
+                    .accessibilityIdentifier("detail.trashed")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.top, 4)
+    }
+
+    /// An empty or unchanged title is ignored.
+    private func finish() {
+        guard editing else { return }
+        editing = false
+        let v = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !v.isEmpty, v != recording.title { onRename(v) }
+    }
+}
+
+// MARK: - Segment text edit (saved as the cleaned text, like the web)
+
+struct SegmentEditSheet: View {
+    let segment: Segment
+    let onSaved: (Segment) -> Void
+
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @State private var text: String
+    @State private var saving = false
+    @State private var confirmDiscard = false
+    @FocusState private var focused: Bool
+    private let original: String
+
+    init(segment: Segment, text: String, onSaved: @escaping (Segment) -> Void) {
+        self.segment = segment
+        self.onSaved = onSaved
+        original = text
+        _text = State(initialValue: text)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("逐字稿文字", text: $text, axis: .vertical)
+                    .lineLimit(3...12)
+                    .focused($focused)
+                    .accessibilityIdentifier("segment.edit.text")
+            }
+            .navigationTitle("編輯文字")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { if text != original { confirmDiscard = true } else { dismiss() } }
+                        .accessibilityIdentifier("segment.edit.cancel")
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("儲存") { Task { await save() } }.disabled(saving).accessibilityIdentifier("segment.edit.save")
+                }
+            }
+            .alert("有未儲存的變更", isPresented: $confirmDiscard) {
+                Button("放棄", role: .destructive) { dismiss() }
+                Button("繼續編輯", role: .cancel) {}
+            }
+            .onAppear { focused = true }
+        }
+        .interactiveDismissDisabled(text != original)
+        .presentationDetents([.medium, .large])
+    }
+
+    /// Empty or unchanged text is ignored.
+    private func save() async {
+        let v = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !v.isEmpty, v != original else { dismiss(); return }
+        saving = true
+        defer { saving = false }
+        do {
+            let seg: Segment = try await app.json("PATCH", "api/segments/\(segment.id)", ["text": v])
+            onSaved(seg)
+            dismiss()
+        } catch { app.fail(error) }
+    }
 }

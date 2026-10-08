@@ -4,12 +4,14 @@ import SwiftUI
 struct RecordView: View {
     let folders: [Folder]
     let defaultFolder: Int?
+    let defaultLanguage: String
 
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss
     @State private var finished: URL?
     @State private var title = ""
     @State private var folder: Int?
+    @State private var language = "zh"
     @State private var error: String?
     @State private var confirmDiscard = false
 
@@ -23,7 +25,7 @@ struct RecordView: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .interactiveDismissDisabled()
-        .onAppear { folder = defaultFolder }
+        .onAppear { folder = defaultFolder; language = defaultLanguage }
     }
 
     private var recording: some View {
@@ -112,6 +114,12 @@ struct RecordView: View {
                     }
                 }
             }
+            Section("語言") {
+                Picker("語言", selection: $language) {
+                    ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                }
+                .accessibilityIdentifier("save.language")
+            }
             Section {
                 Button("儲存並上傳", action: save).bold().accessibilityIdentifier("save.submit")
             } footer: {
@@ -133,7 +141,7 @@ struct RecordView: View {
     private func save() {
         guard let finished else { return }
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        app.uploads.enqueue(file: finished, filename: (t.isEmpty ? Self.defaultTitle() : t) + ".m4a", folderId: folder)
+        app.uploads.enqueue(file: finished, filename: (t.isEmpty ? Self.defaultTitle() : t) + ".m4a", folderId: folder, language: language)
         dismiss()
     }
 

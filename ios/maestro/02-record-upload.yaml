@@ -1,10 +1,17 @@
-# Record ~5 s with the simulator mic, save with a title, wait for the upload queue to drain and the recording to be listed.
+# Record ~5 s with the simulator mic, save with a title and language English (sent with POST /api/uploads), wait for the upload queue to drain and the recording to be listed.
 appId: ai.3mi.tally
+env:
+  BACKEND: ${BACKEND || 'http://127.0.0.1:8795'}
 ---
-- launchApp:
-    stopApp: true
-    permissions:
-      microphone: allow
+- retry: # simctl launch can race the previous instance's exit; the first snapshot then reports the app as not running
+    maxRetries: 2
+    commands:
+      - stopApp # its own step: launchApp's built-in stop can still be terminating when simctl launches
+      - launchApp:
+          stopApp: false
+          permissions:
+            microphone: allow
+      - waitForAnimationToEnd
 - tapOn:
     id: library.record
 - tapOn:
@@ -25,6 +32,9 @@ appId: ai.3mi.tally
     id: save.title
 - eraseText: 40
 - inputText: 模擬器錄音
+- tapOn:
+    id: save.language
+- tapOn: English
 - takeScreenshot: ${SHOTS || '/tmp'}/m02-save
 - tapOn:
     id: save.submit
@@ -39,3 +49,7 @@ appId: ai.3mi.tally
     visible: 模擬器錄音
     timeout: 30000
 - takeScreenshot: ${SHOTS || '/tmp'}/m02-uploaded
+- runScript:
+    file: scripts/recording-field.js
+    env: { Q: 模擬器錄音, FIELD: language }
+- assertTrue: ${output.value == 'en'}

@@ -15,6 +15,21 @@ import WebKit
     /// Access said our token is missing or expired; the UI shows the login screen.
     var needsLogin = false
     var extraHeaders: [String: String] = [:]
+    /// App-wide toast (web: toast()); shown over every screen so it survives popping back to the list.
+    var toast: String?
+    /// Server settings (web: SET); sttLang is the default for record / import / retranscribe, `me` marks 「（我）」.
+    var settings = AppSettings()
+    var sttLang: String { settings.sttLang }
+    /// GET /api/runners, refreshed every 15 s by the library (web: S.runners).
+    var runners: Runners?
+    /// A tally:// link waiting to be opened (LibraryView / AskView consume it).
+    var link: DeepLink?
+
+    static let noRunnerText = "目前沒有 runner 在線，會等 runner 上線後自動處理。"
+    /// web noRunner(): known runner status and none online.
+    var noRunner: Bool { runners.map { !$0.runners.contains(where: \.online) } ?? false }
+    /// Notice for queued work (recording / summary / ask), like the web's 「排隊中。」 + NO_RUNNER.
+    var queuedText: String { noRunner ? "排隊中。" + Self.noRunnerText : "排隊中…" }
 
     let recorder = Recorder()
     @ObservationIgnored lazy var uploads = UploadQueue(app: self)
@@ -48,8 +63,14 @@ import WebKit
         try await call { try await $0.get(path, query: query) }
     }
 
-    func json<T: Decodable>(_ method: String, _ path: String, _ body: [String: Any?] = [:]) async throws -> T {
-        try await call { try await $0.json(method, path, body) }
+    func json<T: Decodable>(_ method: String, _ path: String, _ body: [String: Any?] = [:], query: [URLQueryItem] = []) async throws -> T {
+        try await call { try await $0.json(method, path, body, query: query) }
+    }
+
+    /// web fail(): errors as a longer toast.
+    func fail(_ error: Error) {
+        if error is CancellationError { return }
+        toast = "錯誤：" + error.localizedDescription
     }
 
     func call<T>(_ op: (Backend) async throws -> T) async throws -> T {
@@ -60,6 +81,14 @@ import WebKit
             authExpired()
             throw APIError.authRequired
         }
+    }
+
+    func loadSettings() async {
+        if let s: AppSettings = try? await get("api/settings") { settings = s }
+    }
+
+    func loadRunners() async {
+        if let r: Runners = try? await get("api/runners") { runners = r }
     }
 
     func authExpired() {

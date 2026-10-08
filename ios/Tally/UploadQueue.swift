@@ -8,6 +8,7 @@ nonisolated struct UploadItem: Codable, Identifiable, Hashable, Sendable {
     var path: String          // relative to Documents
     var filename: String      // sent to the Worker; its stem becomes the title
     var folderId: Int?
+    var language: String?     // zh|en|ja|auto; nil = the settings default (older queue files have none)
     var size: Int64
     var recordingId: Int?     // set once POST /api/uploads succeeded
     var partSize: Int64?
@@ -71,20 +72,20 @@ nonisolated enum Parts {
     }
 
     /// Adds a file that already lives under Documents.
-    func enqueue(file: URL, filename: String, folderId: Int?) {
+    func enqueue(file: URL, filename: String, folderId: Int?, language: String? = nil) {
         let docs = URL.documentsDirectory.standardizedFileURL.path(percentEncoded: false)
         let path = String(file.standardizedFileURL.path(percentEncoded: false).dropFirst(docs.count))
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let size = (try? FileManager.default.attributesOfItem(atPath: file.path(percentEncoded: false))[.size] as? Int64) ?? 0
-        items.append(UploadItem(path: path, filename: Self.safeName(filename), folderId: folderId, size: size))
+        items.append(UploadItem(path: path, filename: Self.safeName(filename), folderId: folderId, language: language, size: size))
         save()
         kick()
     }
 
     /// Imports from Files: copy into Documents/Imports (the picker's URL is only valid briefly), then queue.
-    func importFile(_ src: URL, folderId: Int?) async throws {
+    func importFile(_ src: URL, folderId: Int?, language: String?) async throws {
         let dst = try await Self.copyIn(src)
-        enqueue(file: dst, filename: src.lastPathComponent, folderId: folderId)
+        enqueue(file: dst, filename: src.lastPathComponent, folderId: folderId, language: language)
     }
 
     /// Off the main actor: a large video or an iCloud file that must download first would freeze the UI.
@@ -170,7 +171,7 @@ nonisolated enum Parts {
             guard item.size > 0 else { throw APIError.http(0, "檔案是空的") }
             if item.recordingId == nil {
                 let start: UploadStart = try await app.json("POST", "api/uploads",
-                    ["filename": item.filename, "size": item.size, "folder_id": item.folderId])
+                    ["filename": item.filename, "size": item.size, "folder_id": item.folderId, "language": item.language])
                 item.recordingId = start.recordingId
                 item.partSize = start.partSize
                 item.etags = [:]

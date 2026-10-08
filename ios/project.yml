@@ -33,6 +33,8 @@ targets:
         UIBackgroundModes: [audio]
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false
+        # tally:// links: recordings, views, folders, trash, 問問看 (see DeepLink)
+        CFBundleURLTypes: [{CFBundleURLName: ai.3mi.tally, CFBundleURLSchemes: [tally]}]
         # self-hosted backends: allow plain http to *.local / LAN dev servers (wrangler dev with DEV_NO_AUTH)
         NSAppTransportSecurity: {NSAllowsLocalNetworking: true}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]

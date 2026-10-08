@@ -12,6 +12,11 @@ nonisolated struct Recording: Codable, Identifiable, Hashable, Sendable {
     var createdAt: String
     var deletedAt: String?
     var folderId: Int?
+    var language: String?          // zh|en|ja|auto; nil = the settings default
+    var note: String?              // why it waits (e.g. STT quota), with notBefore
+    var notBefore: String?
+    var playKey: String?           // set once play.m4a exists: the player can show before processing ends
+    var size: Int64?
     var hasSummary: Bool?          // list only
     var topSpeakers: [TopSpeaker]? // list only
 
@@ -27,6 +32,9 @@ nonisolated struct Speaker: Codable, Identifiable, Hashable, Sendable {
     var suggest: Suggest?
 
     struct Suggest: Codable, Hashable, Sendable { var personId: Int; var name: String; var score: Double? }
+
+    /// 「（我）」: the speaker is the person picked as 我是誰 in settings.
+    func isMe(_ me: Int?) -> Bool { me != nil && personId == me }
 }
 
 nonisolated struct Segment: Codable, Identifiable, Hashable, Sendable {
@@ -63,6 +71,90 @@ nonisolated struct Folder: Codable, Identifiable, Hashable, Sendable {
     var count: Int
 }
 
+/// GET/PUT /api/settings (web: SET). PUT takes any subset; `body` sends them all (me: null clears it).
+nonisolated struct AppSettings: Codable, Equatable, Sendable {
+    var about = ""
+    var contentFocus = ""
+    var instructions = ""
+    var sttLang = "zh"
+    var cleanup = true
+    var autoLabel = true
+    var me: Int?
+    var vocab: [String] = []
+
+    init() {}
+    /// Missing keys keep the defaults (an older Worker may not know every setting).
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = AppSettings()
+        about = try c.decodeIfPresent(String.self, forKey: .about) ?? d.about
+        contentFocus = try c.decodeIfPresent(String.self, forKey: .contentFocus) ?? d.contentFocus
+        instructions = try c.decodeIfPresent(String.self, forKey: .instructions) ?? d.instructions
+        sttLang = try c.decodeIfPresent(String.self, forKey: .sttLang) ?? d.sttLang
+        cleanup = try c.decodeIfPresent(Bool.self, forKey: .cleanup) ?? d.cleanup
+        autoLabel = try c.decodeIfPresent(Bool.self, forKey: .autoLabel) ?? d.autoLabel
+        me = try c.decodeIfPresent(Int.self, forKey: .me)
+        vocab = try c.decodeIfPresent([String].self, forKey: .vocab) ?? d.vocab
+    }
+
+    var body: [String: Any?] {
+        ["about": about.trimmingCharacters(in: .whitespacesAndNewlines),
+         "content_focus": contentFocus.trimmingCharacters(in: .whitespacesAndNewlines),
+         "instructions": instructions.trimmingCharacters(in: .whitespacesAndNewlines),
+         "stt_lang": sttLang, "cleanup": cleanup, "auto_label": autoLabel, "me": me, "vocab": vocab]
+    }
+
+    /// Summary language follows the transcription language (web: sumLang).
+    var summaryLang: String { ["en": "en", "ja": "ja"][sttLang] ?? "zh-TW" }
+}
+
+/// GET /api/persons: people with voiceprints (web: PERSONS).
+nonisolated struct Person: Codable, Identifiable, Hashable, Sendable {
+    let id: Int
+    var name: String
+    var prints: Int?
+    var speakers: Int?
+}
+
+/// GET /api/vocab/suggestions.
+nonisolated struct VocabSuggestions: Codable, Sendable {
+    var suggestions: [Suggestion]
+    var lastScan: Scan?
+    var pending: Int
+
+    struct Suggestion: Codable, Hashable, Sendable {
+        var term: String
+        var misheard: [String]
+        var hits: Int
+        var recordings: Int
+    }
+    struct Scan: Codable, Sendable { var at: String?; var status: String; var error: String? }
+
+    var scanning: Bool { ["queued", "running"].contains(lastScan?.status ?? "") }
+}
+
+/// 問問看: GET /api/asks rows and GET /api/asks/:id.
+nonisolated struct Ask: Codable, Identifiable, Hashable, Sendable {
+    let id: Int
+    var question: String
+    var status: String
+    var createdAt: String
+    var preview: String?          // list only
+    var answerMd: String?
+    var error: String?
+    var sources: [Int]?
+    var recordings: [Ref]?
+
+    struct Ref: Codable, Hashable, Sendable { var id: Int; var title: String; var deleted: Int? } // deleted: SQLite 0/1
+
+    static let statusLabels = ["queued": "排隊中", "running": "思考中", "done": "完成", "error": "錯誤"]
+}
+
+/// Transcription languages (web: LANGS); POST /api/uploads and retranscribe take the id.
+nonisolated enum STTLang {
+    static let all: [(id: String, name: String)] = [("zh", "中文"), ("en", "English"), ("ja", "日本語"), ("auto", "自動偵測")]
+}
+
 nonisolated struct Named: Codable, Hashable, Sendable { var id: String; var name: String }
 nonisolated struct Templates: Codable, Sendable { var templates: [Named]; var languages: [Named] }
 
@@ -88,6 +180,14 @@ nonisolated struct Runners: Codable, Sendable {
         var recordingId: Int?
     }
     struct Queued: Codable, Sendable { var recordings: Int; var summaries: Int; var asks: Int?; var vocab: Int? }
+
+    var online: Int { runners.filter(\.online).count }
+    /// The header's 「排隊 N」: recordings + summaries + asks (web: renderRunners).
+    var waiting: Int { queued.recordings + queued.summaries + (queued.asks ?? 0) }
+    /// 「N 台 runner 在線」 / 「沒有 runner 在線」.
+    var headline: String { online > 0 ? "\(online) 台 runner 在線" : "沒有 runner 在線" }
+    /// Nothing online but work is waiting: the header warns.
+    var warn: Bool { online == 0 && waiting > 0 }
 }
 
 nonisolated struct UploadStart: Codable, Sendable { var recordingId: Int; var partSize: Int64 }
@@ -201,8 +301,8 @@ nonisolated struct Backend: Sendable {
     }
 
     /// JSON body; the Worker requires Content-Type: application/json on every non-GET JSON request.
-    func json<T: Decodable>(_ method: String, _ path: String, _ body: [String: Any?] = [:]) async throws -> T {
-        var req = request(path, method: method)
+    func json<T: Decodable>(_ method: String, _ path: String, _ body: [String: Any?] = [:], query: [URLQueryItem] = []) async throws -> T {
+        var req = request(path, method: method, query: query)
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = try JSONSerialization.data(withJSONObject: body.mapValues { $0 ?? NSNull() })
         return try Self.decoder.decode(T.self, from: await send(req))

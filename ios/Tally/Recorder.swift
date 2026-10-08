@@ -31,7 +31,7 @@ import UIKit
         case denied, failed
         var errorDescription: String? {
             switch self {
-            case .denied: "沒有麥克風權限。請到「設定 › Tally」開啟麥克風。"
+            case .denied: "沒有麥克風權限。請到「設定 › Kiroku」開啟麥克風。"
             case .failed: "無法開始錄音。"
             }
         }

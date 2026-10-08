@@ -10,6 +10,12 @@
 4. LLM: **local agent over ACP** (Agent Client Protocol, default `claude-agent-acp`).
 5. Hosting: **local single Go binary**, files on disk. Language: **Go** (changed from Python 2026-09-30).
 
+## Product direction (2026-10-08)
+
+- Name: **Kiroku 記錄** (renamed from Tally; internal names — repo, `tally` runner binary, bundle id `ai.3mi.tally` — unchanged).
+- Positioning: users choose either **Kiroku Cloud** (paid, hosted by us) or **self-hosted** (their own Worker + runner); the iOS app connects to either via the backend URL setting. Marketing: "both work".
+- Implication for later: Cloud needs multi-tenant accounts, billing (minutes quota), and hosted processing; self-host stays the single-user setup in docs/SETUP.md.
+
 ## 1. Goal
 
 Build a web app that takes many audio/video files → transcribes with speaker diarization → lets the user name speakers and play back in sync → generates template-based AI summaries → supports Q&A across all recordings.

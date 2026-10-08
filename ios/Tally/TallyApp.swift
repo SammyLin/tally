@@ -44,7 +44,7 @@ struct ConnectView: View {
                 } header: {
                     Text("後端網址")
                 } footer: {
-                    Text("你自己架設的 Tally（Cloudflare Worker）網址。若有 Cloudflare Access 保護，下一步會請你登入。")
+                    Text("你的 Kiroku 伺服器網址（Kiroku Cloud 或自架）。若有 Cloudflare Access 保護，下一步會請你登入。")
                 }
                 if let message {
                     Section { Text(message).foregroundStyle(.red).accessibilityIdentifier("connect.error") }
@@ -60,7 +60,7 @@ struct ConnectView: View {
                     .disabled(busy || address.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .navigationTitle("連線到你的 Tally")
+            .navigationTitle("連線到你的 Kiroku")
             .onAppear { if address.isEmpty { address = app.baseURL?.absoluteString ?? AppModel.defaultBackend } }
             .sheet(item: $loginURL) { url in
                 LoginView(url: url) { jwt in

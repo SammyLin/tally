@@ -27,9 +27,9 @@ targets:
     info:
       path: Tally/Info.plist
       properties:
-        CFBundleDisplayName: Tally
+        CFBundleDisplayName: Kiroku
         CFBundleDevelopmentRegion: zh-Hant
-        NSMicrophoneUsageDescription: Tally 需要使用麥克風來錄音。
+        NSMicrophoneUsageDescription: Kiroku 需要使用麥克風來錄音。
         UIBackgroundModes: [audio]
         UILaunchScreen: {}
         ITSAppUsesNonExemptEncryption: false

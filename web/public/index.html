@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Tally</title>
-<meta name="description" content="Tally — 個人語音筆記：錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。">
+<title>Kiroku</title>
+<meta name="description" content="Kiroku 記錄 — 個人語音筆記：錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -449,7 +449,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 <div class="app" id="app">
   <header class="topbar">
     <button type="button" class="ghost" id="menuBtn" aria-label="錄音清單" aria-expanded="false" aria-controls="lib"></button>
-    <span class="tb-title"><span class="mark" aria-hidden="true"></span>Tally</span>
+    <span class="tb-title"><span class="mark" aria-hidden="true"></span>Kiroku</span>
     <button type="button" class="rchip" data-runners aria-label="Runner 狀態"></button>
     <button type="button" class="rec" data-rec>錄音</button>
   </header>
@@ -457,7 +457,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   <aside class="lib" id="lib" aria-label="錄音清單">
     <nav class="nav" aria-label="資料夾">
       <div class="nav-head">
-        <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Tally</h1></div>
+        <div class="brand"><span class="mark" aria-hidden="true"></span><h1>Kiroku</h1></div>
         <div class="nav-acts">
           <button type="button" class="rec" data-rec>錄音</button>
           <button type="button" data-import>匯入</button>
@@ -754,7 +754,7 @@ function updateTitle(){
   const r=S.id&&S.d?.recording;
   const t=r?`${r.title}・${S.tab==='summary'?'摘要':'逐字稿'}`
     :S.view==='folder'?pathOf(S.folder).map(f=>f.name).join(' / ')||'資料夾':VIEWS[S.view];
-  document.title=`${t} — Tally`;
+  document.title=`${t} — Kiroku`;
 }
 function dropTarget(el,on){
   const ok=e=>(on.rec&&e.dataTransfer.types.includes(T_REC))||(on.folder&&e.dataTransfer.types.includes(T_DIR));
@@ -1867,7 +1867,7 @@ $('#pushOn').onchange=async e=>{
   try{
     if(on.checked){
       // ask first: iOS only shows the prompt inside the user gesture
-      if(await Notification.requestPermission()!=='granted'){on.checked=false;toast('通知權限被封鎖，請到瀏覽器或系統設定允許 Tally 通知',5000);return}
+      if(await Notification.requestPermission()!=='granted'){on.checked=false;toast('通知權限被封鎖，請到瀏覽器或系統設定允許 Kiroku 通知',5000);return}
       const sub=await (await swReg).pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(PUSH_KEY)});
       await api('/api/push/subscribe',{method:'POST',body:sub.toJSON()});
       toast('已開啟通知');

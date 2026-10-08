@@ -73,9 +73,9 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             personAlerts(form)
-                .navigationTitle("設定")
+                .navigationTitle("設定").kirokuChrome()
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
+                .kirokuToolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("關閉") { if dirty { confirmDiscard = true } else { dismiss() } }
                             .accessibilityIdentifier("settings.close")

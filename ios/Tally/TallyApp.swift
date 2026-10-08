@@ -44,7 +44,9 @@ struct ConnectView: View {
                         .accessibilityIdentifier("connect.cloud")
                         .disabled(busy)
                     } header: {
-                        KirokuMark(height: 44)
+                        KirokuLockup(size: 30)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
                     } footer: {
                         Text("用 Kiroku 帳號登入，由我們代管處理。")
                     }
@@ -78,7 +80,8 @@ struct ConnectView: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("連線到你的 Kiroku")
+            .navigationTitle("連線到你的 Kiroku").kirokuChrome()
+            .kirokuNavyScreen() // first screen = the logo: lockup on navy (web: .landing)
             .onAppear { if address.isEmpty { address = app.baseURL?.absoluteString ?? AppModel.defaultBackend } }
             .sheet(item: $loginURL) { url in
                 LoginView(url: url) { jwt in
@@ -150,6 +153,7 @@ struct CloudSignIn: View {
                 HStack { Button("取消", action: onCancel).accessibilityIdentifier("cloud.cancel"); Spacer() }
                     .padding(.horizontal)
             }
+            .kirokuNavyScreen() // web: Clerk mounts inside the navy .landing
     }
 }
 
@@ -191,9 +195,9 @@ struct RunnersView: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("Runner 狀態")
+            .navigationTitle("Runner 狀態").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .kirokuToolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .refreshable { await load() }
             .task {
                 while !Task.isCancelled {

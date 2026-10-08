@@ -188,9 +188,9 @@ struct FoldersSheet: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("資料夾")
+            .navigationTitle("資料夾").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .kirokuToolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .alert(naming?.title ?? "", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } }), presenting: naming) { n in
                 TextField("名稱", text: $name).accessibilityIdentifier("folder.name")
                 Button("取消", role: .cancel) {}
@@ -319,9 +319,9 @@ struct FolderPicker: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle(title)
+            .navigationTitle(title).kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
+            .kirokuToolbar { ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } } }
         }
         .presentationDetents([.medium, .large])
     }
@@ -375,9 +375,9 @@ struct LanguageSheet: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle(title)
+            .navigationTitle(title).kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .kirokuToolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     // onOK first: dismiss runs the caller's binding setter, which can clear state onOK reads

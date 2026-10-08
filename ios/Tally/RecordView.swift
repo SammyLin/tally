@@ -23,6 +23,8 @@ struct RecordView: View {
                 if finished != nil { saveForm } else { recording }
             }
             .navigationBarTitleDisplayMode(.inline)
+            .kirokuChrome()
+            .kirokuNavyScreen() // the record screen is the logo: navy, ivory, seafoam
         }
         .interactiveDismissDisabled()
         .onAppear { folder = defaultFolder; language = defaultLanguage }
@@ -34,13 +36,14 @@ struct RecordView: View {
             Text(Prompt.fmtDur(rec.elapsed))
                 .font(.system(size: 64, weight: .light, design: .rounded))
                 .monospacedDigit()
+                .foregroundStyle(Color(.brandIvory))
                 .accessibilityLabel("已錄 \(Prompt.fmtDur(rec.elapsed))")
                 .accessibilityIdentifier("record.timer")
             LevelMeter(level: rec.level)
                 .frame(height: 48)
                 .padding(.horizontal, 32)
                 .accessibilityHidden(true)
-            Text(statusText).foregroundStyle(Color(.inkMuted)).font(.callout)
+            Text(statusText).foregroundStyle(Color(.onChromeMuted)).font(.callout)
             if let error { Text(error).accessibilityIdentifier("record.error").foregroundStyle(Color(.danger)).multilineTextAlignment(.center).padding(.horizontal) }
             Spacer()
             HStack(spacing: 48) {
@@ -50,8 +53,9 @@ struct RecordView: View {
                     } label: {
                         Image(systemName: rec.state == .paused ? "play.fill" : "pause.fill")
                             .font(.title)
+                            .foregroundStyle(Color(.brandIvory))
                             .frame(width: 64, height: 64)
-                            .background(.quaternary, in: .circle)
+                            .background(Color(.chromeRaised), in: .circle)
                     }
                     .accessibilityLabel(rec.state == .paused ? "繼續錄音" : "暫停")
                     .accessibilityIdentifier("record.pause")
@@ -59,10 +63,9 @@ struct RecordView: View {
                 Button(action: mainAction) {
                     ZStack {
                         Circle().stroke(Color(.rec), lineWidth: 4).frame(width: 88, height: 88)
-                        if rec.isActive {
-                            RoundedRectangle(cornerRadius: 8).fill(Color(.rec)).frame(width: 34, height: 34)
-                        } else {
-                            Circle().fill(Color(.rec)).frame(width: 72, height: 72)
+                        Circle().fill(Color(.rec)).frame(width: 72, height: 72)
+                        if rec.isActive { // navy glyph: ivory on the coral Rec is only 1.9:1
+                            RoundedRectangle(cornerRadius: 8).fill(Color(.brandNavy)).frame(width: 30, height: 30)
                         }
                     }
                 }
@@ -72,7 +75,6 @@ struct RecordView: View {
             .padding(.bottom, 40)
         }
         .frame(maxWidth: .infinity)
-        .background(Color(.paper))
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 if !rec.isActive { Button("關閉") { dismiss() } }
@@ -166,8 +168,9 @@ struct LevelMeter: View {
             HStack(spacing: 4) {
                 ForEach(0..<bars, id: \.self) { i in
                     let on = Float(i) / Float(bars) < level
+                    // lit bars fade in left to right, like the logo's wave
                     Capsule()
-                        .fill(on ? Color.accentColor : Color.secondary.opacity(0.25))
+                        .fill(on ? Color(.brandSeafoam).opacity(0.45 + 0.55 * Double(i) / Double(bars - 1)) : Color(.onChromeMuted).opacity(0.3))
                         .frame(height: geo.size.height * (0.3 + 0.7 * CGFloat(on ? 1 : 0.4)))
                 }
             }

@@ -67,6 +67,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ai.3mi.tally.share
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor # Shared/Brand.xcassets: same colors as the app
+        ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
         GENERATE_INFOPLIST_FILE: YES
     info:
       path: KirokuShare/Info.plist

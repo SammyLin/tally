@@ -59,7 +59,8 @@ struct DetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.paper))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar { toolbar }
+        .kirokuChrome()
+        .kirokuToolbar { toolbar }
         .task {
             while !Task.isCancelled {
                 await load()
@@ -528,9 +529,9 @@ struct SpeakerSheet: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("重新命名講者")
+            .navigationTitle("重新命名講者").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .kirokuToolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("儲存", action: save).accessibilityIdentifier("rename.save").disabled(saving || text.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -608,7 +609,7 @@ struct PlayerBar: View {
         }
         .padding(.horizontal)
         .padding(.vertical, 8)
-        .background(.bar)
+        .kirokuNavyScreen() // navy like the web's .player: the frame around the ivory transcript
     }
 }
 
@@ -785,9 +786,9 @@ struct PromptOptionsSheet: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("複製為 Prompt")
+            .navigationTitle("複製為 Prompt").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .kirokuToolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .onChange(of: o) { _, new in new.save(); copied = false }
         }
     }
@@ -837,7 +838,7 @@ struct DetailHeader: View {
                 .accessibilityIdentifier("detail.folder")
             if editing {
                 TextField("標題", text: $text)
-                    .font(.title3.bold())
+                    .font(.title3.bold()).fontDesign(.rounded)
                     .focused($focused)
                     .submitLabel(.done)
                     .onSubmit { finish() }
@@ -846,7 +847,7 @@ struct DetailHeader: View {
                     .accessibilityIdentifier("detail.titleField")
             } else {
                 Button { text = recording.title; editing = true } label: {
-                    Text(recording.title).font(.title3.bold()).multilineTextAlignment(.leading)
+                    Text(recording.title).font(.title3.bold()).fontDesign(.rounded).multilineTextAlignment(.leading)
                 }
                 .buttonStyle(.plain)
                 .accessibilityHint("點擊重新命名")
@@ -904,9 +905,9 @@ struct SegmentEditSheet: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("編輯文字")
+            .navigationTitle("編輯文字").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
+            .kirokuToolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("取消") { if text != original { confirmDiscard = true } else { dismiss() } }
                         .accessibilityIdentifier("segment.edit.cancel")

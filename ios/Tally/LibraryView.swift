@@ -51,7 +51,7 @@ struct LibraryView: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle(title)
+            .navigationTitle(title).kirokuChrome()
             .navigationDestination(for: RecRoute.self) { DetailView(id: $0.id, seekMs: $0.ms, summary: $0.summary).id($0) } // a link may replace the open one
             .searchable(text: $query, prompt: "搜尋標題或逐字稿")
             .refreshable { await load() }
@@ -75,7 +75,7 @@ struct LibraryView: View {
                     try? await Task.sleep(for: .seconds(recordings.contains { Status.busy($0.status) } ? 3 : 30))
                 }
             }
-            .toolbar { toolbar }
+            .kirokuToolbar { toolbar }
             .onChange(of: scope) { _, s in s.save() }
             .onChange(of: path) { _, p in if p.isEmpty { Task { await load() } } } // back from a detail that may have moved/trashed it
             #if DEBUG
@@ -159,7 +159,13 @@ struct LibraryView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .principal) { KirokuMark(height: 18) }
+        ToolbarItem(placement: .principal) { // navy bar: the logo's ivory + seafoam, then where we are
+            HStack(spacing: 8) {
+                KirokuMark(height: 18).accessibilityHidden(true)
+                Text(title).font(.headline).fontDesign(.rounded).foregroundStyle(Color(.brandIvory)).lineLimit(1)
+            }
+            .environment(\.colorScheme, .dark)
+        }
         ToolbarItem(placement: .topBarLeading) {
             Button { showFolders = true } label: { Label("資料夾", systemImage: "sidebar.left") }
                 .accessibilityIdentifier("library.folders")
@@ -178,9 +184,9 @@ struct LibraryView: View {
         Button { showRecord = true } label: {
             Image(systemName: "mic.fill")
                 .font(.title.weight(.semibold))
-                .foregroundStyle(Color(.onAccent)) // white on light Rec, navy on dark Rec
+                .foregroundStyle(Color(.brandNavy)) // same seafoam + navy as the web 錄音 button and the logo
                 .frame(width: 72, height: 72)
-                .background(Color(.rec), in: .circle)
+                .background(Color(.brandSeafoam), in: .circle)
                 .shadow(radius: 4, y: 2)
         }
         .accessibilityLabel("開始錄音")

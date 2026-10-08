@@ -128,9 +128,9 @@ struct ShareView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("存到 Kiroku")
+                .navigationTitle("存到 Kiroku").kirokuChrome()
                 .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
+                .kirokuToolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("取消", action: model.cancel).disabled(model.saved).accessibilityIdentifier("share.cancel")
                     }
@@ -149,40 +149,44 @@ struct ShareView: View {
                 .accessibilityIdentifier("share.done")
         } else {
             Form {
-                Section {
-                    ForEach(model.files) { f in
-                        LabeledContent(f.name, value: ByteCountFormatter.string(fromByteCount: f.size, countStyle: .file))
-                    }
-                    if model.loading { ProgressView("讀取中…") }
-                } footer: {
-                    if model.skipped > 0 { Text("略過 \(model.skipped) 個項目（只收音訊／影片，最多 \(ShareModel.maxItems) 個）。") }
-                }
-                if model.files.count == 1 {
-                    Section("標題") {
-                        TextField("標題", text: $model.title).accessibilityIdentifier("share.title")
-                    }
-                }
-                if !model.files.isEmpty {
+                Group {
                     Section {
-                        if !model.folders.isEmpty {
-                            Picker("資料夾", selection: $model.folderId) {
-                                Text("未分類").tag(Int?.none)
-                                ForEach(model.folders, id: \.id) { f in
-                                    Text(String(repeating: "　", count: f.depth) + f.name).tag(Int?.some(f.id))
+                        ForEach(model.files) { f in
+                            LabeledContent(f.name, value: ByteCountFormatter.string(fromByteCount: f.size, countStyle: .file))
+                        }
+                        if model.loading { ProgressView("讀取中…") }
+                    } footer: {
+                        if model.skipped > 0 { Text("略過 \(model.skipped) 個項目（只收音訊／影片，最多 \(ShareModel.maxItems) 個）。") }
+                    }
+                    if model.files.count == 1 {
+                        Section("標題") {
+                            TextField("標題", text: $model.title).accessibilityIdentifier("share.title")
+                        }
+                    }
+                    if !model.files.isEmpty {
+                        Section {
+                            if !model.folders.isEmpty {
+                                Picker("資料夾", selection: $model.folderId) {
+                                    Text("未分類").tag(Int?.none)
+                                    ForEach(model.folders, id: \.id) { f in
+                                        Text(String(repeating: "　", count: f.depth) + f.name).tag(Int?.some(f.id))
+                                    }
                                 }
+                                .accessibilityIdentifier("share.folder")
                             }
-                            .accessibilityIdentifier("share.folder")
+                            Picker("轉錄語言", selection: $model.language) {
+                                ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
+                            }
+                            .accessibilityIdentifier("share.language")
                         }
-                        Picker("轉錄語言", selection: $model.language) {
-                            ForEach(STTLang.all, id: \.id) { Text($0.name).tag($0.id) }
-                        }
-                        .accessibilityIdentifier("share.language")
+                    }
+                    if let e = model.error {
+                        Section { Text(e).foregroundStyle(Color(.danger)) }
                     }
                 }
-                if let e = model.error {
-                    Section { Text(e).foregroundStyle(.red) }
-                }
+                .kirokuRows()
             }
+            .kirokuList()
         }
     }
 }

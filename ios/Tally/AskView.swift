@@ -111,9 +111,9 @@ struct AskView: View {
                 .kirokuRows()
             }
             .kirokuList()
-            .navigationTitle("問問看")
+            .navigationTitle("問問看").kirokuChrome()
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+            .kirokuToolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             .refreshable { await load() }
             .task(id: path.isEmpty) {
                 guard path.isEmpty else { return }
@@ -211,9 +211,9 @@ struct AskDetailView: View {
                 }
             } else { ProgressView() }
         }
-        .navigationTitle("問問看")
+        .navigationTitle("問問看").kirokuChrome()
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
+        .kirokuToolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 if let md = ask?.answerMd {
                     Button { UIPasteboard.general.string = md; app.toast = "已複製" } label: { Label("複製回答", systemImage: "doc.on.doc") }

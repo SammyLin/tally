@@ -21,8 +21,9 @@ struct LoginView: View {
                         .accessibilityIdentifier("login.host")
                 }
                 .overlay { if loading { ProgressView() } }
-                .navigationTitle("登入 \(url.host() ?? "")")
+                .navigationTitle("登入 \(url.host() ?? "")").kirokuChrome()
                 .navigationBarTitleDisplayMode(.inline)
+                .kirokuNavyScreen()
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) { Button("取消", action: onCancel) }
                 }

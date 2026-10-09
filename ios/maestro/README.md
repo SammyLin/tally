@@ -24,7 +24,9 @@ vocabulary + suggestion, 我是誰, person rename → merge, unsaved-changes gua
 Markdown table / list / quote / code and summary date, 1.75×, speaker bands, transcript range → 「複製這段為 Prompt」,
 removing an offline runner). 13 share extension (Files → 分享測試 → 分享 → Kiroku; folder 客戶B, 日本語, title 「分享的錄音」 → 儲存;
 Kiroku adopts the inbox entry and uploads it, checked via the API). It taps 儲存 by position: once the keyboard has been up,
-Maestro can't see the extension's elements. `subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
+Maestro can't see the extension's elements. 14 onboarding (welcome: 「使用 Kiroku Cloud」 / 「連線到自己的伺服器」 / 「兩者差別」; with `-e CLOUD_BACKEND=https://kiroku.3mi.ai` also
+註冊 / 登入 and Clerk's sign-up sheet, cancelled — only GET /api/config, never signs up). 01 and 06 reach the URL field through 「連線到自己的伺服器」.
+`subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
 `scripts/recording-field.js` reads a recording field from the backend for `assertTrue`.
 
 Options: `-e BACKEND=http://…` (default `http://127.0.0.1:8795`), `-e SHOTS=<dir>` for screenshots (default /tmp), `-e ACCESS_BACKEND=…`

@@ -8,7 +8,6 @@ import WebKit
 @Observable final class AppModel {
     enum Phase { case setup, main }
 
-    static let defaultBackend = "https://records.3mi.ai"
     /// Kiroku Cloud (multi-user, Clerk sign-in). DEBUG runs can point it elsewhere with `-cloudURL http://127.0.0.1:8800`.
     static var cloudURL: URL { UserDefaults.standard.string(forKey: "cloudURL").flatMap(URL.init(string:)) ?? URL(string: "https://kiroku.3mi.ai")! }
 

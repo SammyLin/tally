@@ -122,3 +122,38 @@ Contract for the `kiroku-cloud-auth` branch. Self-host (`AUTH_MODE=access`) must
 
 ### Done when
 The self-host tests pass unchanged, `idor.test.ts` passes, the migration test passes, `kiroku-cloud` is deployed at kiroku.3mi.ai, two accounts can each sign in on web and iOS, and neither sees the other's data.
+
+## Product model (Obsidian-style)
+
+Added 2026-10-09. Full landing copy and the iOS onboarding spec are in the `kiroku-landing` branch plan.
+
+### One app, two ways to use it
+- **One official app** (iOS + web) for everyone. On first launch the user picks **Kiroku Cloud** (sign up / sign in with Clerk; we host storage and processing; paid plans with monthly minutes, prices TBD) or **連線到自己的伺服器** (free, open source: Cloudflare Worker + D1 + R2 + their own Mac runner; the app connects to their URL, with Cloudflare Access login or none). Settings shows the current mode and can switch; data never moves between the two.
+- **Self-hosters can add paid Kiroku services**, the way Obsidian Sync works on a local vault:
+  1. **雲端轉錄與 AI 處理**: the self-hosted Worker hands jobs to Kiroku Cloud processing instead of a Mac runner. Billed per processed minute.
+  2. **遠端備份** (later): nightly D1 export + new R2 audio to Kiroku Cloud storage, which you can restore into a new self-host install.
+- The marketing landing shows only on kiroku.3mi.ai (clerk mode, signed out, or `/?about`). Access-mode self-host instances never show it.
+
+| Piece | Status |
+|---|---|
+| Self-host (Worker + D1 + R2 + Mac runner, Access) | Exists |
+| Cloud accounts + per-user isolation (Phase 1) | Exists |
+| Cloud processing | Interim: the owner's Mac runners via `RUNNER_TOKEN`. Groq + Claude API in Phase 2 is planned |
+| Plans / minutes / ECPay + IAP (Phase 3) | Planned |
+| 雲端轉錄與 AI 處理 for self-hosters | Planned (needs Phase 2 + 3) |
+| 遠端備份 for self-hosters | Planned, after the processing service |
+| Cloud ↔ self-host data move (export/import) | Not planned yet |
+
+### Design: self-host + Kiroku services (not built)
+- **Outbound only.** The self-hosted Worker sits behind Access, so every call goes from it to Kiroku Cloud. Nothing about Access changes, and Cloud never holds a credential to the user's server.
+- **Service key.** The user creates it on kiroku.3mi.ai under 帳號 → 服務金鑰 and sees `kk_svc_…` once. Cloud stores `sha256` in `service_keys(id, user_id, name, key_hash UNIQUE, created_at, last_used_at, revoked_at)`. Self-host setup: `wrangler secret put KIROKU_SERVICE_KEY`, plus var `KIROKU_SERVICE_URL` (default `https://kiroku.3mi.ai`) and the setting `processing = runner | cloud | auto` (auto = cloud only when no runner is online). The `/api/service/v1/*` route class accepts only service keys, and service keys are rejected everywhere else (fail closed, like Phase 1).
+- **Hand-off API.**
+  - `POST /api/service/v1/jobs`: multipart with `meta` (`kind` transcribe|summary|ask|vocab, `ref`, the user's settings, `duration_s`, and a payload holding what a runner would otherwise fetch: the transcript + template for summaries, and for Ask the excerpts the self-host retrieved itself) plus `audio`, streamed from the self-host's R2. The quota check and minutes debit happen here; when the quota is used up the call returns 402.
+  - `GET /api/service/v1/jobs/<id>` returns `{status, result}`. `result` uses the same JSON the runner posts today, so the self-host writes it through the existing runner-result code.
+  - `DELETE /api/service/v1/jobs/<id>` acknowledges the result, and Cloud deletes the audio and result right away.
+  - On the self-host side a Cron Trigger (every minute) submits jobs, polls them and applies results. Jobs get `handler='cloud'` + `remote_id`, and `/api/runner/claim` never returns them. Voiceprint matching keeps running in the self-host Worker on the returned embeddings, so the voiceprint library stays on the user's server.
+  - Service jobs run on the Phase 2 pipeline and create no `recordings` rows in the Cloud account.
+- **Billing.** The same `usage_minutes` ledger as Phase 3 (debit on accept, refund on failure), with the entitlement from the account's ECPay or IAP subscription. Cloud web lists usage per key.
+- **Privacy statement.** Audio leaves your server only for a job, and only when you turn the service on. It is deleted once your server has fetched the result. It is not stored in any account and not used for training. Voiceprints stay on your server. You can turn the service off or revoke the key at any time. Before publishing: confirm the Groq / Anthropic API data terms and set a retention limit for results that are never fetched.
+- **Tests when built.** A revoked key gets 401. A key on a user route gets 401. A Clerk token on `/api/service/*` gets 401. A job with `handler='cloud'` is never claimed by a runner. A fetched result produces the same rows as the runner path.
+- **遠端備份 (later).** `PUT /api/service/v1/backup/{d1|r2/<key>}` with the same key, nightly by Cron, stored under `svc/<user_id>/backup/`. Optional client-side encryption with a passphrase we never see.

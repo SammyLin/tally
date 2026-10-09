@@ -62,18 +62,20 @@ The `KirokuShare` target (bundle ID `ai.3mi.tally.share`, embedded in the app) s
 - When the web view is back on the backend's host and has a `CF_Authorization` cookie, the app takes that JWT and stores it in the Keychain (AfterFirstUnlock, so uploads keep working while the phone is locked).
 - API calls send the JWT in the `cf-access-token` header, and never as a cookie. The player sends it as a `CF_Authorization` cookie on the media request.
 - When the token expires, the next 401/403 shows the login screen again, and the upload queue pauses until you sign in.
-- Settings → 變更後端 logs you out and clears the web view's cookies. Items still in the upload queue start over on the new backend, in 未分類.
+- Settings → 連線方式 → 切換連線方式 logs you out and clears the web view's cookies. Items still in the upload queue start over on the new backend, in 未分類.
 
 ## Login (Kiroku Cloud)
 
-- The connect screen's **Kiroku Cloud** button reads `GET /api/config` from https://kiroku.3mi.ai (DEBUG override:
-  launch argument `-cloudURL http://127.0.0.1:8800`), configures Clerk with the returned publishable key, and shows Clerk's
-  `AuthView` (email code; Apple / Google only if enabled on the Clerk instance). The custom-URL / Access path is unchanged.
+- The welcome screen offers **使用 Kiroku Cloud** or **連線到自己的伺服器** (the self-hosted URL / Access path, unchanged),
+  plus 「兩者差別」 (https://kiroku.3mi.ai/?about#compare). 使用 Kiroku Cloud reads `GET /api/config` from https://kiroku.3mi.ai
+  (DEBUG override: launch argument `-cloudURL http://127.0.0.1:8800`) and configures Clerk with the returned publishable key;
+  with an existing session it goes straight in, otherwise 註冊 / 登入 open Clerk's `AuthView` in `.signUp` / `.signIn`
+  (email code; Apple / Google only if enabled on the Clerk instance). An expired session shows `.signIn`.
 - Every request sends `Authorization: Bearer <session token>`, fetched per request (`Clerk.shared.auth.getToken()`; the SDK
   caches it and refreshes it before its 60 s expiry), so the upload queue keeps working. A 401 shows the sign-in again.
 - Playback goes through `MediaLoader` (an `AVAssetResourceLoaderDelegate`): each range request gets a fresh token, since
   AVPlayer would otherwise keep reusing one that expires mid-playback.
-- Settings → 登出 / 變更後端 calls `Clerk.shared.auth.signOut()` and clears the stored cloud mode.
+- Settings → 登出 / 切換連線方式 calls `Clerk.shared.auth.signOut()` and clears the stored cloud mode.
 - `maestro/cloud/13-cloud-login.yaml` signs in a Clerk test user (`…+clerk_test@example.com`, code 424242); it is not part of
   the default suite since it needs a backend in clerk mode: `maestro test ios/maestro/cloud -e CLOUD=http://127.0.0.1:8800`.
 

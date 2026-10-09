@@ -1,4 +1,4 @@
-# Fresh install → 「連線到你的 Kiroku」 → local backend without Access → library shows the seeded recording.
+# Fresh install → welcome → 「連線到自己的伺服器」 → local backend without Access → library shows the seeded recording.
 appId: ai.3mi.tally
 env:
   BACKEND: ${BACKEND || 'http://127.0.0.1:8795'}
@@ -8,7 +8,10 @@ env:
     clearKeychain: true
     permissions:
       microphone: allow
-- assertVisible: 連線到你的 Kiroku
+- assertVisible:
+    id: connect.cloud
+- tapOn:
+    id: connect.selfhost
 - tapOn:
     id: connect.url
 - eraseText: 60

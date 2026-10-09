@@ -1,3 +1,4 @@
+import ClerkKit
 import SwiftUI
 import UIKit
 
@@ -95,8 +96,11 @@ struct SettingsView: View {
                     Button("放棄", role: .destructive) { dismiss() }
                     Button("繼續編輯", role: .cancel) {}
                 }
-                .confirmationDialog("變更後端會登出目前的帳號。尚未上傳的錄音會上傳到新的後端。", isPresented: $confirmChange, titleVisibility: .visible) {
-                    Button("變更後端", role: .destructive) { Task { await app.changeBackend() } }
+                .alert("切換連線方式", isPresented: $confirmChange) {
+                    Button("切換", role: .destructive) { Task { await app.changeBackend() } }
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text(Self.switchMessage(pending: app.uploads.items.count))
                 }
                 .task { await load() }
                 .task {
@@ -306,13 +310,20 @@ struct SettingsView: View {
     }
 
     @ViewBuilder private var backendSections: some View {
-        Section("後端") {
-            LabeledContent("網址", value: app.baseURL?.absoluteString ?? "—")
-            LabeledContent("登入", value: app.cloud ? "Kiroku Cloud" : app.token != nil ? "Cloudflare Access" : (app.extraHeaders.isEmpty ? "不需要登入" : "Service token（測試）"))
-            Button("變更後端…") { confirmChange = true }
-            if app.token != nil || app.cloud {
-                Button("登出", role: .destructive) { Task { await app.logout(); dismiss() } }
+        Section("連線方式") {
+            LabeledContent("目前使用", value: app.cloud ? "Kiroku Cloud" : "自己的伺服器")
+                .accessibilityIdentifier("settings.mode")
+            if app.cloud {
+                LabeledContent("帳號", value: Clerk.shared.user?.primaryEmailAddress?.emailAddress ?? "—")
+            } else {
+                LabeledContent("網址", value: app.baseURL?.absoluteString ?? "—")
+                LabeledContent("登入", value: app.token != nil ? "Cloudflare Access" : (app.extraHeaders.isEmpty ? "不需要登入" : "Service token（測試）"))
             }
+            Button("切換連線方式…") { confirmChange = true }
+                .accessibilityIdentifier("settings.switchMode")
+        }
+        if app.token != nil || app.cloud {
+            Section { Button("登出", role: .destructive) { Task { await app.logout(); dismiss() } } }
         }
         Section {
             LabeledContent("等待上傳", value: "\(app.uploads.items.count)")
@@ -325,6 +336,12 @@ struct SettingsView: View {
         Section {
             LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
         }
+    }
+
+    /// Cloud and a self-hosted server are separate places: switching moves nothing (the upload queue follows the new connection).
+    static func switchMessage(pending: Int) -> String {
+        "Kiroku Cloud 和自己的伺服器是兩個獨立的地方，切換不會搬移任何錄音、逐字稿、聲紋或設定。原本的資料留在原處，切回來就看得到。"
+            + (pending > 0 ? "\n\n還有 \(pending) 段錄音尚未上傳，切換後會上傳到新的連線。" : "")
     }
 
     // MARK: Actions

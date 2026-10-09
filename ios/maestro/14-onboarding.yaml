@@ -11,6 +11,8 @@ appId: ai.3mi.tally
           clearKeychain: true
           arguments:
             cloudURL: ${CLOUD_BACKEND || 'https://kiroku.3mi.ai'}
+- tapOn:
+    id: intro.skip # fresh install: the intro comes first (14-intro walks through it)
 - assertVisible:
     id: connect.cloud
 - assertVisible: 使用 Kiroku Cloud

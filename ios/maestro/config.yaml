@@ -17,4 +17,5 @@ executionOrder:
     - 12-parity
     - 13-share-extension
     - 14-onboarding
+    - 14-intro
     - 06-access-login

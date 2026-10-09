@@ -8,6 +8,8 @@ env:
     clearState: true
     clearKeychain: true
 - tapOn:
+    id: intro.skip # fresh install: the intro comes first (14-intro walks through it)
+- tapOn:
     id: connect.selfhost
 - tapOn:
     id: connect.url

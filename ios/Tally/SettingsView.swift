@@ -66,6 +66,7 @@ struct SettingsView: View {
     @State private var newName = ""
     @State private var merging: (person: Person, name: String)?
     @State private var deleting: Person?
+    @State private var showIntro = false
 
     private var dirty: Bool {
         saved.map { draft != $0 } == true || !vocabInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -102,6 +103,7 @@ struct SettingsView: View {
                 } message: {
                     Text(Self.switchMessage(pending: app.uploads.items.count))
                 }
+                .fullScreenCover(isPresented: $showIntro) { IntroView { showIntro = false } }
                 .task { await load() }
                 .task {
                     // poll while a vocabulary scan runs (web: every 5 s)
@@ -334,6 +336,8 @@ struct SettingsView: View {
             Text("錄音會保留在手機上，直到上傳完成。")
         }
         Section {
+            Button("再看一次介紹") { showIntro = true }
+                .accessibilityIdentifier("settings.intro")
             LabeledContent("版本", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "")
         }
     }

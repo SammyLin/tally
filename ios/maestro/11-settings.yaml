@@ -136,5 +136,21 @@ env:
 - extendedWaitUntil:
     notVisible: 刪除「王小明」
     timeout: 10000
+# 「再看一次介紹」 shows the intro over settings; 略過 returns to settings
+- scrollUntilVisible:
+    element:
+      id: settings.intro
+    direction: DOWN
+- tapOn:
+    id: settings.intro
+- extendedWaitUntil:
+    visible: 把對話記下來
+    timeout: 5000
+- tapOn:
+    id: intro.skip
+- extendedWaitUntil:
+    visible:
+      id: settings.intro
+    timeout: 5000
 - tapOn:
     id: settings.close

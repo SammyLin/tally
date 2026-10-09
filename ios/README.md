@@ -66,6 +66,8 @@ The `KirokuShare` target (bundle ID `ai.3mi.tally.share`, embedded in the app) s
 
 ## Login (Kiroku Cloud)
 
+- First launch shows a 3-page intro (`IntroView`: what Kiroku does / 錄音或匯入 → 逐字稿與講者 → 摘要 → 問問看 / Kiroku Cloud or
+  your own server) before the welcome screen; finishing or 略過 sets UserDefaults `introSeen`. 設定 → 「再看一次介紹」 shows it again.
 - The welcome screen offers **使用 Kiroku Cloud** or **連線到自己的伺服器** (the self-hosted URL / Access path, unchanged),
   plus 「兩者差別」 (https://kiroku.3mi.ai/?about#compare). 使用 Kiroku Cloud reads `GET /api/config` from https://kiroku.3mi.ai
   (DEBUG override: launch argument `-cloudURL http://127.0.0.1:8800`) and configures Clerk with the returned publishable key;

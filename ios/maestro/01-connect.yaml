@@ -8,6 +8,8 @@ env:
     clearKeychain: true
     permissions:
       microphone: allow
+- tapOn:
+    id: intro.skip # fresh install: the intro comes first (14-intro walks through it)
 - assertVisible:
     id: connect.cloud
 - tapOn:

@@ -5,12 +5,14 @@ import SwiftUI
 @main
 struct TallyApp: App {
     @State private var app = AppModel()
+    @AppStorage(IntroView.seenKey) private var introSeen = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             Group {
                 switch app.phase {
+                case .setup where !introSeen: IntroView { introSeen = true } // explain first, then ask to connect
                 case .setup: ConnectView()
                 case .main: LibraryView()
                 }

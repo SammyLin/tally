@@ -1,5 +1,7 @@
 # 上線設定：records.3mi.ai
 
+> 這份是維護者自己的部署紀錄（他的網域、Access team、Mac）。想自己架一套的話請看 [`SELF-HOST.md`](SELF-HOST.md)。
+
 目前狀態（2026-09-30 已部署）：
 
 | 項目 | 值 |

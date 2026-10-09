@@ -36,7 +36,7 @@ Audio is stored in your own Cloudflare account and transcribed on your Mac (unle
 
 Requirements: a Cloudflare account (Workers Paid for D1/R2 limits), an Apple Silicon Mac with `ffmpeg`, `whisper-cpp`, Go 1.26.
 
-The step-by-step guide (Cloudflare Access, D1/R2, service tokens, runner as a launchd service, phone use) is in [`docs/SETUP.md`](docs/SETUP.md) (Traditional Chinese). Short version:
+The step-by-step guide (Cloudflare Access, D1/R2, service tokens, runner as a launchd service, phone use) is in [`docs/SELF-HOST.md`](docs/SELF-HOST.md) (Traditional Chinese, with an English summary). Short version:
 
 ```sh
 # Worker

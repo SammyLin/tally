@@ -367,7 +367,7 @@ export const routes: [string, RegExp, Handler][] = [
   // Forget an offline runner (online = seen within 3 min, as in listRunners); it re-registers if it ever claims again.
   // Cloud runners are shared infrastructure: users cannot remove them.
   ["DELETE", /^\/api\/runners\/([^/]+)$/, async (_req, env, [name]) => {
-    if (isCloud(env)) throw new HttpError(403, "runners are managed by Kiroku Cloud");
+    if (isCloud(env)) throw new HttpError(403, "runners are managed by Yanroku Cloud");
     const r = await env.DB.prepare(`DELETE FROM runners WHERE name=? AND last_seen < datetime('now','-3 minutes')`).bind(decodeURIComponent(name)).run();
     if (!r.meta.changes) throw new HttpError(409, "runner is online or unknown");
     return { ok: true };
@@ -395,7 +395,7 @@ export const routes: [string, RegExp, Handler][] = [
   }],
 
   ["POST", /^\/api\/push\/test$/, async (_req, env, _p, _u, _c, uid) => {
-    await notify(env, uid, { title: "Tally", body: "通知已開啟", url: "/", tag: "test" });
+    await notify(env, uid, { title: "Yanroku", body: "通知已開啟", url: "/", tag: "test" });
     return { ok: true };
   }],
 
@@ -479,7 +479,7 @@ export default {
     const method = req.method === "HEAD" ? "GET" : req.method;
     // public in both modes: tells the clients how to sign in
     if (url.pathname === "/api/config" && method === "GET")
-      return Response.json({ auth_mode: isCloud(env) ? "clerk" : "access", clerk_publishable_key: isCloud(env) ? (env.CLERK_PUBLISHABLE_KEY ?? null) : null, app_name: "Kiroku" });
+      return Response.json({ auth_mode: isCloud(env) ? "clerk" : "access", clerk_publishable_key: isCloud(env) ? (env.CLERK_PUBLISHABLE_KEY ?? null) : null, app_name: "Yanroku" });
     const who = await identify(req, env, url.pathname, ctx);
     if (who instanceof Response) return who;
     // CSRF: the Access/__session cookie may ride along on cross-site requests; the runner sends no Sec-Fetch-* headers

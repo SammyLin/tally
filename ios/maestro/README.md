@@ -5,7 +5,7 @@ Run all flows (in `config.yaml` order) against the booted simulator: `maestro te
 Prerequisites:
 1. Local Worker without Access on 8795: in `web/`, `npx wrangler d1 migrations apply noteapp --local --persist-to <dir>`, then
    `npx wrangler dev --port 8795 --ip 127.0.0.1 --local --persist-to <dir> --var DEV_NO_AUTH:1`.
-2. Seed everything on a fresh database: `B=http://127.0.0.1:8795 ios/maestro/seed-all.sh <persist-to dir> some-clip.m4a` (≥ 8 s audio).
+2. Seed everything on a fresh database: `B=http://127.0.0.1:8795 ios/maestro/seed-all.sh <persist-to dir> some-clip.m4a` (9–11.9 s audio: flow 05 expects the second segment at 00:03).
    It runs `seed.sh` four times: 「會議測試」 (01–05, 12); `TITLE=管理測試 SUMMARY=1` (07–09); `TITLE=知識測試 KNOWLEDGE=1`
    (10–11: people 王小明 / 陳大華 on 知識測試's speakers, a vocabulary suggestion 「iOS」, an answered ask citing 知識測試 and a
    failed one); and `PARITY=1 STATE=<dir>` last (12: a Markdown summary on 「會議測試」, a queued 「排隊測試」, runners marked offline).
@@ -22,11 +22,11 @@ delete summary, folder name on list rows) · 09 retranscribe with language, tras
 vocabulary + suggestion, 我是誰, person rename → merge, unsaved-changes guard, a > 50-character word blocks 儲存, save checked via the API, 「（我）」, delete person).
 12 parity (runner header 「沒有 runner 在線」「排隊 1」, no-runner notice, tally:// links to the summary tab / trash / 問問看,
 Markdown table / list / quote / code and summary date, 1.75×, speaker bands, transcript range → 「複製這段為 Prompt」,
-removing an offline runner). 13 share extension (Files → 分享測試 → 分享 → Kiroku; folder 客戶B, 日本語, title 「分享的錄音」 → 儲存;
-Kiroku adopts the inbox entry and uploads it, checked via the API). It taps 儲存 by position: once the keyboard has been up,
-Maestro can't see the extension's elements. 14 onboarding (welcome: 「使用 Kiroku Cloud」 / 「連線到自己的伺服器」 / 「兩者差別」; with `-e CLOUD_BACKEND=https://kiroku.3mi.ai` also
+removing an offline runner). 13 share extension (Files → 分享測試 → 分享 → Yanroku; folder 客戶B, 日本語, title 「分享的錄音」 → 儲存;
+Yanroku adopts the inbox entry and uploads it, checked via the API). It taps 儲存 by position: once the keyboard has been up,
+Maestro can't see the extension's elements. 14 onboarding (welcome: 「使用 Yanroku Cloud」 / 「連線到自己的伺服器」 / 「兩者差別」; with `-e CLOUD_BACKEND=https://kiroku.3mi.ai` also
 註冊 / 登入 and Clerk's sign-up sheet, cancelled — only GET /api/config, never signs up). 14-intro (fresh install: the 3-page intro, swiped through, 開始使用 → welcome; a relaunch skips it). Flows that launch with `clearState` (01, 06, 14-onboarding) tap 略過 (`intro.skip`) first. 01 and 06 reach the URL field through 「連線到自己的伺服器」.
-`subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Kiroku」中打開嗎？」.
+`subflows/open-link.yaml` opens a tally:// link and accepts iOS's 「要在「Yanroku」中打開嗎？」.
 `scripts/recording-field.js` reads a recording field from the backend for `assertTrue`.
 
 Options: `-e BACKEND=http://…` (default `http://127.0.0.1:8795`), `-e SHOTS=<dir>` for screenshots (default /tmp), `-e ACCESS_BACKEND=…`

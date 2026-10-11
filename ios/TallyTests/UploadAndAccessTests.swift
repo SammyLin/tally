@@ -87,7 +87,7 @@ struct CloudTests {
     }
 
     @Test func serverConfigDecodes() throws {
-        let json = #"{"auth_mode":"clerk","clerk_publishable_key":"pk_test_x","app_name":"Kiroku"}"#
+        let json = #"{"auth_mode":"clerk","clerk_publishable_key":"pk_test_x","app_name":"Yanroku"}"#
         let c = try Backend.decoder.decode(ServerConfig.self, from: Data(json.utf8))
         #expect(c.authMode == "clerk" && c.clerkPublishableKey == "pk_test_x")
     }

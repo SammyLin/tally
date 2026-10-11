@@ -98,7 +98,7 @@ export async function notifyJob(env: Env, kind: "recordings" | "summaries" | "as
     const rec = await env.DB.prepare(kind === "summaries"
       ? `SELECT r.id, r.title, r.user_id FROM summaries s JOIN recordings r ON r.id=s.recording_id WHERE s.id=?`
       : `SELECT id, title, user_id FROM recordings WHERE id=?`).bind(jid).first<{ id: number; title: string; user_id: number }>();
-    if (rec) await notify(env, rec.user_id, { title: rec.title || "Tally", body, url: `/#/rec/${rec.id}${kind === "summaries" ? "/summary" : ""}`, tag: `rec-${rec.id}` });
+    if (rec) await notify(env, rec.user_id, { title: rec.title || "Yanroku", body, url: `/#/rec/${rec.id}${kind === "summaries" ? "/summary" : ""}`, tag: `rec-${rec.id}` });
   } catch (e) {
     console.error("push", e);
   }

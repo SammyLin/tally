@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Kiroku 記錄 brand, navy-first like the logo: navy is the frame, ivory is the ink. Colors live in
+/// Yanroku 言錄 brand, navy-first like the logo: navy is the frame, ivory is the ink. Colors live in
 /// Shared/Brand.xcassets (light = ivory reading surface, dark = navy; twins of the web's CSS tokens). This file
 /// only holds the pieces several screens share.
 extension View {
@@ -46,24 +46,24 @@ struct KirokuMark: View {
             .resizable()
             .scaledToFit()
             .frame(height: height)
-            .accessibilityLabel("Kiroku 記錄")
+            .accessibilityLabel("Yanroku 言錄")
     }
 }
 
-/// 「言 Kiroku 記錄」 lockup for navy surfaces: mark, Kiroku in rounded heavy, 記錄 muted.
+/// 「言 Yanroku 言錄」 lockup for navy surfaces: mark, Yanroku in rounded heavy, 言錄 muted.
 struct KirokuLockup: View {
     var size: CGFloat = 17
 
     var body: some View {
         HStack(spacing: size * 0.35) {
             KirokuMark(height: size * 1.1)
-            Text("Kiroku").fontWeight(.heavy).foregroundStyle(Color(.brandIvory))
-            Text("記錄").fontWeight(.bold).foregroundStyle(Color(.onChromeMuted))
+            Text("Yanroku").fontWeight(.heavy).foregroundStyle(Color(.brandIvory))
+            Text("言錄").fontWeight(.bold).foregroundStyle(Color(.onChromeMuted))
         }
         .font(.system(size: size, design: .rounded))
         .environment(\.colorScheme, .dark)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Kiroku 記錄")
+        .accessibilityLabel("Yanroku 言錄")
         .accessibilityAddTraits(.isHeader)
     }
 }

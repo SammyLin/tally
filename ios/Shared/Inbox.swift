@@ -7,7 +7,7 @@ nonisolated enum STTLang {
     static let all: [(id: String, name: String)] = [("zh", "中文"), ("en", "English"), ("ja", "日本語"), ("auto", "自動偵測")]
 }
 
-/// Files shared into Kiroku from the share sheet, handed over through the App Group container:
+/// Files shared into Yanroku from the share sheet, handed over through the App Group container:
 /// `Inbox/<uuid>/<original name>` + `Inbox/<uuid>/meta.json`. The extension builds an entry in `Inbox/.tmp-<uuid>/`
 /// and renames it into place once the file and sidecar are written, so an entry without the dot is always complete.
 /// The app adopts entries into its upload queue (`UploadQueue.adoptInbox`). The app also caches the folder list

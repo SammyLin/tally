@@ -12,8 +12,8 @@
 
 ## Product direction (2026-10-08)
 
-- Name: **Kiroku 記錄** (renamed from Tally; internal names — repo, `tally` runner binary, bundle id `ai.3mi.tally` — unchanged).
-- Positioning: users choose either **Kiroku Cloud** (paid, hosted by us) or **self-hosted** (their own Worker + runner); the iOS app connects to either via the backend URL setting. Marketing: "both work".
+- Name: **Yanroku 言錄**. History: Tally → Kiroku 記錄 (2026-10-08) → **Yanroku 言錄** (2026-10-11), because the kiroku domains were taken; 言 in the name now matches the 言 in the logo (sound wave flowing into 言, unchanged). Planned domain yanroku.app (not bought yet); kiroku.3mi.ai / records.3mi.ai stay live. Internal names — repo, `tally` runner binary, launchd label `ai.3mi.tally-runner`, bundle ids `ai.3mi.tally(.share)`, App Group, Xcode targets `Tally` / `KirokuShare`, Workers `noteapp` / `kiroku-cloud`, D1/R2 names — unchanged.
+- Positioning: users choose either **Yanroku Cloud** (paid, hosted by us) or **self-hosted** (their own Worker + runner); the iOS app connects to either via the backend URL setting. Marketing: "both work".
 - Implication for later: Cloud needs multi-tenant accounts, billing (minutes quota), and hosted processing; self-host stays the single-user setup in docs/SETUP.md.
 
 ## 1. Goal

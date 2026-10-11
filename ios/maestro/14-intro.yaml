@@ -1,4 +1,4 @@
-# Fresh install → the 3-page intro (what Kiroku does / 錄音或匯入 → 逐字稿與講者 → 摘要 → 問問看 / Kiroku Cloud or your own
+# Fresh install → the 3-page intro (what Yanroku does / 錄音或匯入 → 逐字稿與講者 → 摘要 → 問問看 / Yanroku Cloud or your own
 # server), swiped through, → 開始使用 → the welcome screen. Relaunching skips the intro (seen is kept in UserDefaults).
 appId: ai.3mi.tally
 ---
@@ -25,7 +25,7 @@ appId: ai.3mi.tally
 - extendedWaitUntil:
     visible: 資料放在哪裡，由你決定
     timeout: 5000
-- assertVisible: Kiroku Cloud.*
+- assertVisible: Yanroku Cloud.*
 - assertNotVisible:
     id: intro.next
 - takeScreenshot: ${SHOTS || '/tmp'}/m14-intro-3

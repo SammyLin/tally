@@ -99,7 +99,7 @@ nonisolated enum Parts {
         return dst
     }
 
-    /// Files saved from the share sheet (「存到 Kiroku」) wait in the App Group inbox; queue them with their
+    /// Files saved from the share sheet (「存到 Yanroku」) wait in the App Group inbox; queue them with their
     /// title / folder / language. Called at launch and whenever the app becomes active.
     func adoptInbox() {
         guard let inbox = Inbox.directory else { return }

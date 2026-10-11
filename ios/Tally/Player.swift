@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
     @ObservationIgnored private var observer: Any?
     @ObservationIgnored private var loader: MediaLoader? // the resource loader holds its delegate weakly
 
-    /// `freshHeaders` (Kiroku Cloud): credentials expire within a minute, so media goes through MediaLoader,
+    /// `freshHeaders` (Yanroku Cloud): credentials expire within a minute, so media goes through MediaLoader,
     /// which asks for fresh headers on every range request.
     init(url: URL, backend: Backend, fallbackDuration: Double?, freshHeaders: (@Sendable () async throws -> [String: String])? = nil) {
         let asset: AVURLAsset

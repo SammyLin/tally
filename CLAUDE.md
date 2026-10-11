@@ -1,6 +1,6 @@
-# Tally
+# Yanroku 言錄
 
-Tally — self-hosted AI voice notes (renamed from noteapp; D1 `noteapp` / R2 `noteapp-audio` keep the old names). Read `docs/HANDOVER.md` (goals, decisions) and `docs/SPEC.md` (module contracts, schema, API) before changing code. Self-hosting guide for other people: `docs/SELF-HOST.md`; `docs/SETUP.md` is the owner's own deployment.
+Yanroku 言錄 — self-hosted AI voice notes (renamed noteapp → Tally → Kiroku → Yanroku; repo, `tally` binary, bundle ids and Worker names are internal and unchanged; D1 `noteapp` / R2 `noteapp-audio` keep the old names). Read `docs/HANDOVER.md` (goals, decisions) and `docs/SPEC.md` (module contracts, schema, API) before changing code. Self-hosting guide for other people: `docs/SELF-HOST.md`; `docs/SETUP.md` is the owner's own deployment.
 
 Layout:
 - `web/` — Cloudflare Worker (TypeScript): API, UI (`public/index.html`), D1 migrations. Data lives in D1 + R2, behind Cloudflare Access.

@@ -1,4 +1,4 @@
-# Welcome screen: the two ways in (Kiroku Cloud / own server) and 「兩者差別」.
+# Welcome screen: the two ways in (Yanroku Cloud / own server) and 「兩者差別」.
 # With -e CLOUD_BACKEND=<url> (e.g. https://kiroku.3mi.ai, or any Worker in AUTH_MODE=clerk; only GET /api/config is called) it also checks that a
 # signed-out Cloud choice offers 註冊 / 登入 and opens Clerk's sign-up, then cancels. Never signs up.
 appId: ai.3mi.tally
@@ -15,7 +15,7 @@ appId: ai.3mi.tally
     id: intro.skip # fresh install: the intro comes first (14-intro walks through it)
 - assertVisible:
     id: connect.cloud
-- assertVisible: 使用 Kiroku Cloud
+- assertVisible: 使用 Yanroku Cloud
 - assertVisible:
     id: connect.selfhost
 - assertVisible:

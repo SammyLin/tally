@@ -1,4 +1,4 @@
-// IDOR suite for Kiroku Cloud (AUTH_MODE=clerk). Run `sh test/idor.sh`: it starts `wrangler dev --env cloud --port 8801`
+// IDOR suite for Yanroku Cloud (AUTH_MODE=clerk). Run `sh test/idor.sh`: it starts `wrangler dev --env cloud --port 8801`
 // on a fresh local D1 and runs this file with CLERK_SECRET_KEY and RUNNER_TOKEN from .dev.vars.cloud.
 // Two real Clerk dev users; their session tokens are minted through the Backend API, so the Worker's real verification
 // path is exercised (no test-only bypass). User A creates one of everything, then user B is pointed at every user route
@@ -209,7 +209,7 @@ const cases: [string, string, () => Promise<unknown>][] = [
   n404("DELETE", `/api/uploads/${recA}`),
   ["GET", "/api/runners", async () => {
     const r = await ok(call(B, "GET", "/api/runners"));
-    assert.deepEqual(r.runners.map((x: { name: string }) => x.name), ["Kiroku Cloud"]);
+    assert.deepEqual(r.runners.map((x: { name: string }) => x.name), ["Yanroku Cloud"]);
     assert.ok(!("version" in r.runners[0]), "cloud runner entry is synthetic");
   }],
   ["DELETE", "/api/runners/idor", () => status(call(B, "DELETE", "/api/runners/idor"), 403, "B forgets a cloud runner")],

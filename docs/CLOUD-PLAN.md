@@ -1,6 +1,8 @@
-# Kiroku Cloud plan (draft 2026-10-09)
+# Yanroku Cloud plan (draft 2026-10-09)
 
-Goal: offer **Kiroku Cloud** (paid, multi-user, hosted processing) next to the existing **self-hosted** setup. One codebase; the Worker runs in either mode.
+> Renamed from "Kiroku Cloud" on 2026-10-11 (product is now Yanroku 言錄). Worker `kiroku-cloud`, D1 `kiroku_cloud`, R2 `kiroku-cloud-audio` and the kiroku.3mi.ai domain keep their names.
+
+Goal: offer **Yanroku Cloud** (paid, multi-user, hosted processing) next to the existing **self-hosted** setup. One codebase; the Worker runs in either mode.
 
 ## Decisions (user, 2026-10-09)
 
@@ -15,7 +17,7 @@ Goal: offer **Kiroku Cloud** (paid, multi-user, hosted processing) next to the e
 
 `AUTH_MODE` Worker var:
 - `access` (default, today): single user behind Cloudflare Access; Mac runners via service tokens. Self-host docs unchanged.
-- `clerk`: Kiroku Cloud. Every request carries a Clerk session JWT (web cookie / iOS SDK bearer); Worker verifies it networklessly with Clerk's JWKS and resolves `user_id`.
+- `clerk`: Yanroku Cloud. Every request carries a Clerk session JWT (web cookie / iOS SDK bearer); Worker verifies it networklessly with Clerk's JWKS and resolves `user_id`.
 
 ## Phases
 
@@ -58,7 +60,7 @@ Goal: offer **Kiroku Cloud** (paid, multi-user, hosted processing) next to the e
 - Data region / retention promise for Cloud users.
 - Whether Cloud users can still attach their own Mac runner ("bring your own compute") — possible later via per-user runner tokens.
 
-## Kiroku Cloud — Phase 1 (accounts + isolation)
+## Yanroku Cloud — Phase 1 (accounts + isolation)
 
 Contract for the `kiroku-cloud-auth` branch. Self-host (`AUTH_MODE=access`) must behave exactly as today; everything below is additive.
 
@@ -73,7 +75,7 @@ Contract for the `kiroku-cloud-auth` branch. Self-host (`AUTH_MODE=access`) must
 - Route classes in clerk mode, fail closed:
   - `/api/runner/*` → only `Authorization: Bearer <RUNNER_TOKEN>` (constant-time compare). A Clerk token gets 403.
   - Every other `/api/*` and `/media/*` → only a valid Clerk token. The runner token gets 401.
-  - `GET /api/config` → public in both modes: `{auth_mode, clerk_publishable_key, app_name: "Kiroku"}` (`clerk_publishable_key` is null in access mode).
+  - `GET /api/config` → public in both modes: `{auth_mode, clerk_publishable_key, app_name: "Yanroku"}` (`clerk_publishable_key` is null in access mode).
 - `denied()` in `index.ts` becomes `identify(req, env)` → `{uid}` | `{runner: true}` | error `Response`. User handlers get `uid` as their 6th argument `(req, env, match, url, ctx, uid)`. **Scoping rule: every SQL statement in a user handler binds `uid` (`... AND user_id=?`). A row with the wrong owner is reported as 404, never 403.**
 - The existing CSRF check (Sec-Fetch-Site) stays. `__session` is SameSite=Lax, and every non-GET request goes through that check.
 
@@ -94,7 +96,7 @@ Contract for the `kiroku-cloud-auth` branch. Self-host (`AUTH_MODE=access`) must
 ### Runners in clerk mode
 - They process every user's jobs. Claim order stays global (oldest first). `ponytail: no per-user fairness; one heavy user can delay others until Phase 2 queues`.
 - Every runner route loads the job row and acts on **that row's `user_id`**: the claim payload carries that user's `settings` (stt_lang, cleanup, vocab, about, me…), and every derived write and read uses the job's user. This covers transcript/speakers/segments inserts, people/voiceprint creation, voiceprint **matching and suggestions** (`voice.ts` only compares voiceprints with the same `user_id`; `auto_label` is read from that user's settings), **rematch**, **Ask retrieval** (`/api/runner/asks/<id>/transcripts` only searches recordings of the ask's user), **vocab scans** (the from_id..to_id range only covers that user's recordings; suggestions are upserted under that user), and Web Push (only that user's subscriptions).
-- User-facing `GET /api/runners` in clerk mode returns one synthetic entry `{name: "Kiroku Cloud", online, last_seen}` aggregated over all runners. Queue counts and "current job" only cover the caller's own jobs. `DELETE /api/runners/<name>` → 403.
+- User-facing `GET /api/runners` in clerk mode returns one synthetic entry `{name: "Yanroku Cloud", online, last_seen}` aggregated over all runners. Queue counts and "current job" only cover the caller's own jobs. `DELETE /api/runners/<name>` → 403.
 - The runner gets `RUNNER_TOKEN` (new env `RUNNER_TOKEN`, sent as `Authorization: Bearer`) in addition to today's CF Access headers, so the same binary serves both deployments.
 
 ### R2
@@ -111,12 +113,12 @@ Contract for the `kiroku-cloud-auth` branch. Self-host (`AUTH_MODE=access`) must
 ### Web (`public/index.html`, keep the diff structural; styling belongs to the rebrand branch)
 - On boot, `fetch('/api/config')`. In `access` mode nothing changes.
 - In `clerk` mode, load `https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6.38.1/dist/clerk.browser.js` (pinned) and run `Clerk.load()`.
-  - Signed out: a minimal landing page (Kiroku 記錄 wordmark, one sentence, 登入 / 註冊 buttons → `Clerk.openSignIn()` / `openSignUp()`). The app shell is not rendered.
+  - Signed out: a minimal landing page (Yanroku 言錄 wordmark, one sentence, 登入 / 註冊 buttons → `Clerk.openSignIn()` / `openSignUp()`). The app shell is not rendered.
   - Signed in: `Clerk.mountUserButton()` in the header; sign-out returns to the landing page.
 - The single fetch wrapper (`index.html` ~line 643) adds `Authorization: Bearer ${await Clerk.session.getToken()}`. A 401 response sends the user back to the landing page.
 
 ### iOS
-- Connect screen: a new **Kiroku Cloud** button that sets the backend to `https://kiroku.3mi.ai` and signs in with `clerk-ios` (SPM `github.com/clerk/clerk-ios`, pinned `1.6.1`, `AuthView`: email code; Apple/Google appear only if enabled in the Clerk instance). The publishable key comes from that backend's `/api/config`.
+- Connect screen: a new **Yanroku Cloud** button that sets the backend to `https://kiroku.3mi.ai` and signs in with `clerk-ios` (SPM `github.com/clerk/clerk-ios`, pinned `1.6.1`, `AuthView`: email code; Apple/Google appear only if enabled in the Clerk instance). The publishable key comes from that backend's `/api/config`.
 - `API.swift` header building: in cloud mode, send `Authorization: Bearer <Clerk.shared.session.getToken()>`, fetched per request (the SDK caches and refreshes it). The custom-URL path (LoginView / `cf-access-token`) is unchanged.
 - Log out calls `Clerk.shared.signOut()` and clears the stored backend mode. The upload queue keeps working while signed in because tokens are fetched per request.
 
@@ -128,10 +130,10 @@ The self-host tests pass unchanged, `idor.test.ts` passes, the migration test pa
 Added 2026-10-09. Full landing copy and the iOS onboarding spec are in the `kiroku-landing` branch plan.
 
 ### One app, two ways to use it
-- **One official app** (iOS + web) for everyone. On first launch the user picks **Kiroku Cloud** (sign up / sign in with Clerk; we host storage and processing; paid plans with monthly minutes, prices TBD) or **連線到自己的伺服器** (free, open source: Cloudflare Worker + D1 + R2 + their own Mac runner; the app connects to their URL, with Cloudflare Access login or none). Settings shows the current mode and can switch; data never moves between the two.
-- **Self-hosters can add paid Kiroku services**, the way Obsidian Sync works on a local vault:
-  1. **雲端轉錄與 AI 處理**: the self-hosted Worker hands jobs to Kiroku Cloud processing instead of a Mac runner. Billed per processed minute.
-  2. **遠端備份** (later): nightly D1 export + new R2 audio to Kiroku Cloud storage, which you can restore into a new self-host install.
+- **One official app** (iOS + web) for everyone. On first launch the user picks **Yanroku Cloud** (sign up / sign in with Clerk; we host storage and processing; paid plans with monthly minutes, prices TBD) or **連線到自己的伺服器** (free, open source: Cloudflare Worker + D1 + R2 + their own Mac runner; the app connects to their URL, with Cloudflare Access login or none). Settings shows the current mode and can switch; data never moves between the two.
+- **Self-hosters can add paid Yanroku services**, the way Obsidian Sync works on a local vault:
+  1. **雲端轉錄與 AI 處理**: the self-hosted Worker hands jobs to Yanroku Cloud processing instead of a Mac runner. Billed per processed minute.
+  2. **遠端備份** (later): nightly D1 export + new R2 audio to Yanroku Cloud storage, which you can restore into a new self-host install.
 - The marketing landing shows only on kiroku.3mi.ai (clerk mode, signed out, or `/?about`). Access-mode self-host instances never show it.
 
 | Piece | Status |
@@ -144,8 +146,8 @@ Added 2026-10-09. Full landing copy and the iOS onboarding spec are in the `kiro
 | 遠端備份 for self-hosters | Planned, after the processing service |
 | Cloud ↔ self-host data move (export/import) | Not planned yet |
 
-### Design: self-host + Kiroku services (not built)
-- **Outbound only.** The self-hosted Worker sits behind Access, so every call goes from it to Kiroku Cloud. Nothing about Access changes, and Cloud never holds a credential to the user's server.
+### Design: self-host + Yanroku services (not built)
+- **Outbound only.** The self-hosted Worker sits behind Access, so every call goes from it to Yanroku Cloud. Nothing about Access changes, and Cloud never holds a credential to the user's server.
 - **Service key.** The user creates it on kiroku.3mi.ai under 帳號 → 服務金鑰 and sees `kk_svc_…` once. Cloud stores `sha256` in `service_keys(id, user_id, name, key_hash UNIQUE, created_at, last_used_at, revoked_at)`. Self-host setup: `wrangler secret put KIROKU_SERVICE_KEY`, plus var `KIROKU_SERVICE_URL` (default `https://kiroku.3mi.ai`) and the setting `processing = runner | cloud | auto` (auto = cloud only when no runner is online). The `/api/service/v1/*` route class accepts only service keys, and service keys are rejected everywhere else (fail closed, like Phase 1).
 - **Hand-off API.**
   - `POST /api/service/v1/jobs`: multipart with `meta` (`kind` transcribe|summary|ask|vocab, `ref`, the user's settings, `duration_s`, and a payload holding what a runner would otherwise fetch: the transcript + template for summaries, and for Ask the excerpts the self-host retrieved itself) plus `audio`, streamed from the self-host's R2. The quota check and minutes debit happen here; when the quota is used up the call returns 402.

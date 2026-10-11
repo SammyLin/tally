@@ -9,7 +9,7 @@ export interface Env {
   VAPID_PUBLIC_KEY?: string; // Web Push, see push.ts
   VAPID_PRIVATE_KEY?: string;
   VAPID_SUBJECT?: string;
-  AUTH_MODE?: string; // "clerk" = Kiroku Cloud (multi-user); unset/"access" = self-host behind Cloudflare Access, user 1
+  AUTH_MODE?: string; // "clerk" = Yanroku Cloud (multi-user); unset/"access" = self-host behind Cloudflare Access, user 1
   CLERK_PUBLISHABLE_KEY?: string;
   CLERK_AUTHORIZED_PARTIES?: string; // comma list of origins accepted in a token's azp
   CLERK_SECRET_KEY?: string; // secret: Backend API (user email)

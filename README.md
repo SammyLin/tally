@@ -1,12 +1,12 @@
 <p align="center"><img src="web/public/icon.svg" width="72" alt=""></p>
 
-<h1 align="center">Tally</h1>
+<h1 align="center">Yanroku 言錄</h1>
 
 <p align="center">Self-hosted AI voice notes: record or import audio, get a speaker-labelled transcript you can play back in sync, and template-based summaries.<br>自架的 AI 語音筆記：錄音或匯入音訊，轉成分講者、可同步播放的逐字稿，再產生摘要。</p>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/screenshot-dark.png">
-  <img src="docs/images/screenshot-light.png" alt="Tally: transcript view with speaker timeline">
+  <img src="docs/images/screenshot-light.png" alt="Yanroku: transcript view with speaker timeline">
 </picture>
 
 ## Features

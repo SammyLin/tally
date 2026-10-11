@@ -1,6 +1,6 @@
-# 自架 Kiroku（記錄）
+# 自架 Yanroku（言錄）
 
-> **English summary.** Kiroku (repo `tally`) is self-hosted: a Cloudflare Worker (`web/`) stores metadata in D1 and audio in R2, behind Cloudflare Access; one or more Apple Silicon Macs run the Go runner (`runner/`) that claims jobs and does transcription (whisper.cpp or Groq), speaker diarization (sherpa-onnx) and clean-up / summaries / Ask through a local ACP agent (Claude by default). To self-host: (1) put your own domain on Cloudflare, (2) create your own D1 + R2 and add a wrangler `env` with their names, (3) apply migrations and deploy, (4) protect the domain with Cloudflare Access (your email + a Service Auth policy with one service token per runner) and set `ACCESS_TEAM` / `ACCESS_AUD`, (5) build and install the runner on a Mac with `runner/.env` pointing at your domain, (6) connect the iOS app or a browser. `docs/SETUP.md` is the maintainer's own deployment log; this file is the general guide.
+> **English summary.** Yanroku (repo `tally`) is self-hosted: a Cloudflare Worker (`web/`) stores metadata in D1 and audio in R2, behind Cloudflare Access; one or more Apple Silicon Macs run the Go runner (`runner/`) that claims jobs and does transcription (whisper.cpp or Groq), speaker diarization (sherpa-onnx) and clean-up / summaries / Ask through a local ACP agent (Claude by default). To self-host: (1) put your own domain on Cloudflare, (2) create your own D1 + R2 and add a wrangler `env` with their names, (3) apply migrations and deploy, (4) protect the domain with Cloudflare Access (your email + a Service Auth policy with one service token per runner) and set `ACCESS_TEAM` / `ACCESS_AUD`, (5) build and install the runner on a Mac with `runner/.env` pointing at your domain, (6) connect the iOS app or a browser. `docs/SETUP.md` is the maintainer's own deployment log; this file is the general guide.
 
 這份是給「clone 這個 repo、要架在自己 Cloudflare 帳號上」的人看的。以下所有 `your-domain.com`、`<team>`、`<db-id>` 都是佔位，換成你自己的值。
 
@@ -16,7 +16,7 @@
 | Apple Silicon Mac（runner 用） | runner 連結 sherpa-onnx 的 **macOS arm64** dylib（`lib/aarch64-apple-darwin`），Intel Mac 和 Linux 目前跑不了。要能長時間開著、不睡眠 |
 | Groq API key（選配） | `STT_PROVIDER=groq` 時用 Groq Whisper 轉錄，比本機快，但音訊會離開你的 Mac。不填就用本機 whisper.cpp（Metal） |
 | Claude（本機 ACP agent） | 逐字稿整理、標題、摘要、Ask 都透過 ACP agent（預設 `claude-agent-acp`）用你自己的 Claude 帳號在 Mac 上跑。逐字稿文字會送到該 agent 使用的模型 |
-| iPhone（選配） | 用 Kiroku App；不用 App 的話，瀏覽器開你的網址也能錄音、上傳、看結果 |
+| iPhone（選配） | 用 Yanroku App；不用 App 的話，瀏覽器開你的網址也能錄音、上傳、看結果 |
 
 ---
 
@@ -40,7 +40,7 @@ npx wrangler r2 bucket create kiroku-audio
 
 ### 2.2 在 `wrangler.jsonc` 加一個你自己的 env
 
-`web/wrangler.jsonc` 最上層是維護者自己的正式環境（他的 D1 id、R2 名稱、網域 `routes`、`ACCESS_TEAM` / `ACCESS_AUD`、VAPID 公鑰），`env.cloud` 是 Kiroku Cloud。**不要直接用最上層部署**，它的 `routes` 指向別人的網域。
+`web/wrangler.jsonc` 最上層是維護者自己的正式環境（他的 D1 id、R2 名稱、網域 `routes`、`ACCESS_TEAM` / `ACCESS_AUD`、VAPID 公鑰），`env.cloud` 是 Yanroku Cloud。**不要直接用最上層部署**，它的 `routes` 指向別人的網域。
 
 建議做法：在 `"env"` 裡加一個自己的環境（例如 `mine`）。wrangler 的 env **不繼承** bindings、`vars`、`routes`，所以維護者的值不會跑進來；`main`、`assets`、`compatibility_date` 這些則會沿用。
 
@@ -73,7 +73,7 @@ npx wrangler r2 bucket create kiroku-audio
 | `r2_buckets[0].bucket_name` | 2.1 建的 bucket（`binding` 必須是 `AUDIO`） |
 | `routes[0].pattern` | 你的網域（`custom_domain: true`，該網域的 zone 必須在同一個 Cloudflare 帳號） |
 | `vars.ACCESS_TEAM` / `ACCESS_AUD` | 第 3 步取得 |
-| `AUTH_MODE` | **不要設**。不設（或 `access`）= 自架模式，Cloudflare Access 保護、單一使用者；`clerk` 是 Kiroku Cloud 用的 |
+| `AUTH_MODE` | **不要設**。不設（或 `access`）= 自架模式，Cloudflare Access 保護、單一使用者；`clerk` 是 Yanroku Cloud 用的 |
 | `VAPID_PUBLIC_KEY` / `VAPID_SUBJECT` + secret `VAPID_PRIVATE_KEY` | 選配，Web Push「處理完成」通知。不設就沒有推播（格式見 `web/src/push.ts` 開頭註解） |
 
 > 也可以直接改最上層那幾個欄位，但之後 `git pull` 會一直和上游衝突，用 env 比較乾淨。
@@ -170,7 +170,7 @@ CF_ACCESS_CLIENT_SECRET=<這台 Mac 的 token Client Secret>
 | `DIARIZE` / `NUM_SPEAKERS` | `DIARIZE=0` 關掉分講者；`NUM_SPEAKERS=0` 自動判斷人數 |
 | `ACP_AGENT` / `ACP_MODEL` | 預設 `claude-agent-acp`、`opus` |
 | `DATA_DIR` | 模型、暫存、log 的位置，預設 `data` |
-| `RUNNER_TOKEN` | 只有 Kiroku Cloud 用，自架留空 |
+| `RUNNER_TOKEN` | 只有 Yanroku Cloud 用，自架留空 |
 
 `.env` 不要 commit，也不要在兩台 Mac 之間共用 token。
 

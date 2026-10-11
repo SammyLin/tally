@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kiroku</title>
-<meta name="description" content="Kiroku 記錄 — 個人語音筆記：錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。">
+<title>Yanroku</title>
+<meta name="description" content="Yanroku 言錄 — 個人語音筆記：錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。">
 <meta name="robots" content="noindex, nofollow">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -17,7 +17,7 @@
 <script src="https://cdn.jsdelivr.net/npm/marked@15.0.12/marked.min.js" integrity="sha384-948ahk4ZmxYVYOc+rxN1H2gM1EJ2Duhp7uHtZ4WSLkV4Vtx5MUqnV+l7u9B+jFv+" crossorigin="anonymous" defer onload="window.renderSummaries&&renderSummaries();window.renderAskBody&&renderAskBody()"></script>
 <style>
 [hidden]{display:none!important} /* a class's display (flex/grid) must never un-hide an element */
-/* Kiroku 記錄 — navy-first, like the logo: navy is the frame, ivory is the ink.
+/* Yanroku 言錄 — navy-first, like the logo: navy is the frame, ivory is the ink.
    Every colour token is light-dark(IVORY, NAVY): one copy of each value. Chrome surfaces set color-scheme:dark,
    so they (and everything inside them) resolve to NAVY in both themes; in light theme only the reading surface
    (.main) stays ivory paper. Dark theme is navy everywhere. Values: kiroku-navy/NAVY.md (contrast.py checked). */
@@ -156,7 +156,7 @@ select{border-radius:999px;padding-right:1.6em;appearance:none;background-image:
 .picklist{display:grid;gap:2px;max-height:55vh;overflow:auto;margin:0 -6px}
 .pk{border:0;background:none;text-align:left;padding:.5em .6em;padding-left:calc(.6em + var(--d,0)*16px);display:flex;gap:8px;align-items:center;border-radius:var(--r-s)}
 .pk[aria-current=true]{background:var(--sel);font-weight:600}
-/* Kiroku Cloud landing: signed-out "/" in clerk mode, and #/about or /?about for anyone (never in access mode).
+/* Yanroku Cloud landing: signed-out "/" in clerk mode, and #/about or /?about for anyone (never in access mode).
    Navy frame (.lp-navy: header, hero, architecture, footer) in both themes; the other sections follow the OS theme. */
 .landing{font-size:16px;line-height:1.7;background:var(--paper);color:var(--ink)}
 .lp-navy{background:var(--paper)}
@@ -568,7 +568,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 <div class="app" id="app">
   <header class="topbar">
     <button type="button" class="ghost" id="menuBtn" aria-label="錄音清單" aria-expanded="false" aria-controls="lib"></button>
-    <span class="tb-title"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Kiroku<span>記錄</span></span></span>
+    <span class="tb-title"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Yanroku<span>言錄</span></span></span>
     <button type="button" class="rchip" data-runners aria-label="Runner 狀態"></button>
     <button type="button" class="rec" data-rec>錄音</button>
     <div data-user hidden></div>
@@ -577,7 +577,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   <aside class="lib" id="lib" aria-label="錄音清單">
     <nav class="nav" aria-label="資料夾">
       <div class="nav-head">
-        <div class="brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><h1 class="lk">Kiroku<span>記錄</span></h1></div>
+        <div class="brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><h1 class="lk">Yanroku<span>言錄</span></h1></div>
         <div class="nav-acts">
           <button type="button" class="rec" data-rec>錄音</button>
           <button type="button" data-import>匯入</button>
@@ -707,7 +707,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 <main class="landing" id="landing" aria-busy="true" hidden>
   <header class="lp-head lp-navy">
     <div class="lp-in">
-      <span class="lp-brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Kiroku<span>記錄</span></span></span>
+      <span class="lp-brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Yanroku<span>言錄</span></span></span>
       <nav aria-label="頁面段落"><a href="#how">運作方式</a><a href="#compare">兩種用法</a><a href="#arch">架構</a><a href="#faq">常見問題</a></nav>
       <div class="lp-acts">
         <button type="button" data-signin disabled>登入</button><button type="button" class="primary" data-signup disabled>免費註冊</button>
@@ -720,8 +720,8 @@ button.linkbtn:hover{background:none;color:var(--ink)}
     <section class="lp-hero" aria-labelledby="lpTitle">
       <div>
         <h1 id="lpTitle">錄音進來，逐字稿、講者、摘要出去。</h1>
-        <p>Kiroku 記錄把會議、訪談和語音備忘錄轉成標好講者的逐字稿，再依範本整理成摘要。所有錄音都能一起提問，答案附上出處和時間點。</p>
-        <p class="small">用我們的 Kiroku Cloud，或架在你自己的 Cloudflare 帳號上。App 是同一個。</p>
+        <p>Yanroku 言錄把會議、訪談和語音備忘錄轉成標好講者的逐字稿，再依範本整理成摘要。所有錄音都能一起提問，答案附上出處和時間點。</p>
+        <p class="small">用我們的 Yanroku Cloud，或架在你自己的 Cloudflare 帳號上。App 是同一個。</p>
         <div class="lp-cta">
           <button type="button" class="primary" data-signup disabled>免費註冊</button><button type="button" data-signin disabled>登入</button>
           <a class="lp-btn primary" href="/" data-app hidden>回到 App</a>
@@ -735,7 +735,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
   <section id="how" aria-labelledby="lpHow"><div class="lp-in">
     <h2 id="lpHow">運作方式</h2>
     <ol class="lp-steps">
-      <li><h3>錄音或匯入</h3><p>用 iPhone 錄，或匯入音訊、影片（一次多個檔案；影片會自動取出聲音）。其他 App 的錄音可以直接「分享到 Kiroku」。</p></li>
+      <li><h3>錄音或匯入</h3><p>用 iPhone 錄，或匯入音訊、影片（一次多個檔案；影片會自動取出聲音）。其他 App 的錄音可以直接「分享到 Yanroku」。</p></li>
       <li><h3>逐字稿與講者</h3><p>轉成文字並分出講者。幫講者命名一次，之後的錄音會依聲紋自動認出是誰。</p></li>
       <li><h3>摘要</h3><p>選範本和語言產生摘要；同一段錄音可以有多份不同範本的摘要。</p></li>
       <li><h3>提問</h3><p>對所有錄音一起提問，回答附上是哪一段錄音、第幾分鐘說的，點一下就跳過去播放。</p></li>
@@ -744,13 +744,13 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 
   <section id="compare" class="lp-alt" aria-labelledby="lpCompare"><div class="lp-in">
     <h2 id="lpCompare">兩種用法，同一個 App</h2>
-    <p class="lp-lead">就像筆記軟體可以把資料放在自己電腦、也可以付費同步：Kiroku 可以全部交給我們，也可以整套架在你自己的帳號上，需要時再加上我們的雲端服務。</p>
+    <p class="lp-lead">就像筆記軟體可以把資料放在自己電腦、也可以付費同步：Yanroku 可以全部交給我們，也可以整套架在你自己的帳號上，需要時再加上我們的雲端服務。</p>
     <div class="lp-plans">
       <article class="lp-plan">
-        <h3>Kiroku Cloud <span class="lp-tag">測試中</span></h3>
+        <h3>Yanroku Cloud <span class="lp-tag">測試中</span></h3>
         <div class="r"><span class="k">適合</span>想直接開始用</div>
-        <div class="r"><span class="k">登入</span>Kiroku 帳號</div>
-        <div class="r"><span class="k">資料放在</span>Kiroku Cloud</div>
+        <div class="r"><span class="k">登入</span>Yanroku 帳號</div>
+        <div class="r"><span class="k">資料放在</span>Yanroku Cloud</div>
         <div class="r"><span class="k">轉錄與 AI</span>我們處理</div>
         <div class="r"><span class="k">需要準備</span>無</div>
         <div class="r"><span class="k">費用</span>規劃為月訂閱，含每月轉錄分鐘數</div>
@@ -772,17 +772,17 @@ button.linkbtn:hover{background:none;color:var(--ink)}
         <div class="r"><span class="k">登入</span>你自己的 Cloudflare Access</div>
         <div class="r"><span class="k">資料放在</span>你的 Cloudflare 帳號</div>
         <div class="r"><span class="k">轉錄與 AI</span>我們處理，結果存回你的伺服器</div>
-        <div class="r"><span class="k">需要準備</span>Cloudflare 帳號、Kiroku 帳號</div>
+        <div class="r"><span class="k">需要準備</span>Cloudflare 帳號、Yanroku 帳號</div>
         <div class="r"><span class="k">費用</span>依處理分鐘數計費</div>
         <div class="act"><a class="lp-btn" href="#faq-service">了解設計</a></div>
       </article>
     </div>
-    <p class="lp-note">價格即將公布。Kiroku Cloud 與自架伺服器的資料彼此獨立，不會自動同步或搬移。</p>
+    <p class="lp-note">價格即將公布。Yanroku Cloud 與自架伺服器的資料彼此獨立，不會自動同步或搬移。</p>
   </div></section>
 
   <section id="arch" class="lp-navy" aria-labelledby="lpArch"><div class="lp-in">
     <h2 id="lpArch">架構一覽</h2>
-    <p class="lp-lead">Kiroku 的伺服器是一個 Cloudflare Worker，資料在 D1（資料庫）和 R2（音訊檔）。轉錄和 AI 處理在另一端：自架時是你自己的 Mac，Kiroku Cloud 則由我們處理。</p>
+    <p class="lp-lead">Yanroku 的伺服器是一個 Cloudflare Worker，資料在 D1（資料庫）和 R2（音訊檔）。轉錄和 AI 處理在另一端：自架時是你自己的 Mac，Yanroku Cloud 則由我們處理。</p>
     <figure class="lp-arch" aria-labelledby="lpArch">
       <div class="lp-col ga-app"><span class="k">App</span>
         <div class="lp-box"><b>iPhone App</b><span class="s">錄音、上傳佇列、分享延伸</span></div>
@@ -790,7 +790,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
       </div>
       <div class="lp-conn ga-c1"><svg viewBox="0 0 96 16" aria-hidden="true"><path d="M2 8H92M84 2l8 6-8 6"/></svg><span>HTTPS<span class="sr">：App 連到伺服器</span></span></div>
       <div class="lp-col ga-srv"><span class="k">伺服器</span>
-        <div class="lp-box lp-gate"><span><b>Kiroku Cloud</b>Clerk 登入</span><span><b>自架</b>Cloudflare Access</span></div>
+        <div class="lp-box lp-gate"><span><b>Yanroku Cloud</b>Clerk 登入</span><span><b>自架</b>Cloudflare Access</span></div>
         <div class="lp-box lp-worker"><b>Cloudflare Worker（API + 網頁）</b>
           <div class="lp-box data"><b>D1 資料庫</b><span class="s">錄音資訊、逐字稿、講者、聲紋、摘要</span></div>
           <div class="lp-box data"><b>R2</b><span class="s">音訊檔</span></div>
@@ -802,8 +802,8 @@ button.linkbtn:hover{background:none;color:var(--ink)}
       </div>
       <div class="lp-conn dash ga-c3"><svg viewBox="0 0 96 16" aria-hidden="true"><path d="M12 2L4 8l8 6M4 8H92M84 2l8 6-8 6"/></svg><span>雲端處理服務（規劃中）：自架伺服器用服務金鑰送來</span></div>
       <div class="lp-col ga-cld">
-        <div class="lp-box planned"><b>Kiroku Cloud 處理（規劃中）</b><ul><li>Groq 轉錄</li><li>講者分離 + 聲紋</li><li>Claude API：整理、摘要、提問</li></ul></div>
-        <p class="lp-foot-note">目前 Kiroku Cloud 的工作仍由我們的 Mac runner 處理。</p>
+        <div class="lp-box planned"><b>Yanroku Cloud 處理（規劃中）</b><ul><li>Groq 轉錄</li><li>講者分離 + 聲紋</li><li>Claude API：整理、摘要、提問</li></ul></div>
+        <p class="lp-foot-note">目前 Yanroku Cloud 的工作仍由我們的 Mac runner 處理。</p>
       </div>
     </figure>
   </div></section>
@@ -824,7 +824,7 @@ button.linkbtn:hover{background:none;color:var(--ink)}
 
   <section id="ios" aria-labelledby="lpIos"><div class="lp-in">
     <h2 id="lpIos">iPhone App</h2>
-    <p class="lp-lead">錄音、背景上傳、播放和提問都在 App 裡完成；在語音備忘錄或其他 App 按「分享 → 存到 Kiroku」就能匯入。第一次打開時選擇「使用 Kiroku Cloud」或「連線到自己的伺服器」，之後隨時可以在設定切換。</p>
+    <p class="lp-lead">錄音、背景上傳、播放和提問都在 App 裡完成；在語音備忘錄或其他 App 按「分享 → 存到 Yanroku」就能匯入。第一次打開時選擇「使用 Yanroku Cloud」或「連線到自己的伺服器」，之後隨時可以在設定切換。</p>
     <p class="lp-note">目前透過 TestFlight 測試中，App Store 版即將推出。網頁版也能「加入主畫面」使用。</p>
   </div></section>
 
@@ -832,16 +832,16 @@ button.linkbtn:hover{background:none;color:var(--ink)}
     <h2 id="lpFaq">常見問題</h2>
     <details><summary>自己架設要付費嗎？</summary><p>軟體免費、開源（MIT）。你需要自己的 Cloudflare 帳號（Workers、D1、R2 都有免費額度，超過依 Cloudflare 計費）和一台 Apple Silicon 的 Mac 執行轉錄。</p></details>
     <details><summary>一定要用 Mac 嗎？</summary><p>自架目前需要。之後的「雲端處理」服務可以讓你的伺服器把轉錄交給我們，就不需要 Mac 一直開著。</p></details>
-    <details><summary>可以從自架搬到 Kiroku Cloud（或反過來）嗎？</summary><p>目前不行，兩邊的資料彼此獨立。App 切換連線方式不會搬移任何資料，原本的資料留在原處。</p></details>
-    <details id="faq-service"><summary>「自己架設 + 雲端處理」怎麼運作？</summary><p>你在 Kiroku 帳號建立一把服務金鑰，存進自己 Worker 的 secret。有新錄音時，你的伺服器把音訊送來處理、取回結果、存進你自己的資料庫，我們這邊處理完就刪除。全程都是你的伺服器主動連出，不需要開放任何連入權限。這項服務還在規劃中。</p></details>
+    <details><summary>可以從自架搬到 Yanroku Cloud（或反過來）嗎？</summary><p>目前不行，兩邊的資料彼此獨立。App 切換連線方式不會搬移任何資料，原本的資料留在原處。</p></details>
+    <details id="faq-service"><summary>「自己架設 + 雲端處理」怎麼運作？</summary><p>你在 Yanroku 帳號建立一把服務金鑰，存進自己 Worker 的 secret。有新錄音時，你的伺服器把音訊送來處理、取回結果、存進你自己的資料庫，我們這邊處理完就刪除。全程都是你的伺服器主動連出，不需要開放任何連入權限。這項服務還在規劃中。</p></details>
     <details><summary>支援哪些語言？</summary><p>轉錄語言可以在設定選擇預設值，每次錄音或匯入也能另外指定；摘要可指定輸出語言。</p></details>
     <details><summary>我的錄音會被拿去訓練 AI 嗎？</summary><p>不會。</p></details>
-    <details><summary>價格？</summary><p>Kiroku Cloud 會是月訂閱、含每月轉錄分鐘數，價格即將公布。網頁與 App 內都可以訂閱。</p></details>
+    <details><summary>價格？</summary><p>Yanroku Cloud 會是月訂閱、含每月轉錄分鐘數，價格即將公布。網頁與 App 內都可以訂閱。</p></details>
     <details><summary>有 Android 版嗎？</summary><p>還沒有。Android 可以用瀏覽器開網頁版並加入主畫面。</p></details>
   </div></section>
 
   <footer class="lp-foot lp-navy"><div class="lp-in">
-    <span class="lp-brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Kiroku<span>記錄</span></span></span>
+    <span class="lp-brand"><svg class="mark" aria-hidden="true" focusable="false"><use href="#k-mark"/></svg><span class="lk">Yanroku<span>言錄</span></span></span>
     <a href="https://github.com/SammyLin/tally" rel="noopener">GitHub</a>
     <a href="https://github.com/SammyLin/tally/blob/main/docs/SELF-HOST.md" rel="noopener">自架指南</a>
     <small>© 2026 Sammy Lin</small>
@@ -1020,7 +1020,7 @@ function updateTitle(){
   const r=S.id&&S.d?.recording;
   const t=r?`${r.title}・${S.tab==='summary'?'摘要':'逐字稿'}`
     :S.view==='folder'?pathOf(S.folder).map(f=>f.name).join(' / ')||'資料夾':VIEWS[S.view];
-  document.title=`${t} — Kiroku`;
+  document.title=`${t} — Yanroku`;
 }
 function dropTarget(el,on){
   const ok=e=>(on.rec&&e.dataTransfer.types.includes(T_REC))||(on.folder&&e.dataTransfer.types.includes(T_DIR));
@@ -1398,7 +1398,7 @@ function route(){
 addEventListener('hashchange',()=>{if(!$('#landing').hidden||(clerk&&isAbout()))return location.reload();route()});
 function hero(){
   return h('section',{class:'hero','aria-labelledby':'heroT'},
-    h('p',{class:'eyebrow',text:'KIROKU · 記錄'}),
+    h('p',{class:'eyebrow',text:'YANROKU · 言錄'}),
     h('h2',{id:'heroT'},'把聲音，',h('br'),'變成可以',h('em',{text:'翻閱'}),'的筆記'),
     h('p',{text:'錄音或匯入音訊、影片，自動轉成逐字稿、分出每位講者，再整理成摘要。點任何一句話，就從那裡開始播放。'}),
     h('div',{class:'hero-acts'},
@@ -2111,7 +2111,7 @@ function personRow(p){
 
 /* ---------- push notifications (sw.js) ---------- */
 const swReg='serviceWorker' in navigator?navigator.serviceWorker.register('/sw.js').catch(e=>{console.warn('sw',e);return null}):Promise.resolve(null);
-// notification click with Tally already open: sw.js posts the target URL; only its hash routes (assigning "/" would reload)
+// notification click with Yanroku already open: sw.js posts the target URL; only its hash routes (assigning "/" would reload)
 if('serviceWorker' in navigator)navigator.serviceWorker.addEventListener('message',e=>{
   const hash=e.data?.open&&new URL(e.data.open).hash;if(hash&&hash!==location.hash)location.hash=hash});
 let PUSH_KEY;
@@ -2135,7 +2135,7 @@ $('#pushOn').onchange=async e=>{
   try{
     if(on.checked){
       // ask first: iOS only shows the prompt inside the user gesture
-      if(await Notification.requestPermission()!=='granted'){on.checked=false;toast('通知權限被封鎖，請到瀏覽器或系統設定允許 Kiroku 通知',5000);return}
+      if(await Notification.requestPermission()!=='granted'){on.checked=false;toast('通知權限被封鎖，請到瀏覽器或系統設定允許 Yanroku 通知',5000);return}
       const sub=await (await swReg).pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64uBytes(PUSH_KEY)});
       await api('/api/push/subscribe',{method:'POST',body:sub.toJSON()});
       toast('已開啟通知');
@@ -2166,14 +2166,14 @@ function start(){
   route();
 }
 
-/* ---------- boot: self-host (Cloudflare Access) or Kiroku Cloud (Clerk sign-in) ---------- */
+/* ---------- boot: self-host (Cloudflare Access) or Yanroku Cloud (Clerk sign-in) ---------- */
 let clerk=null;
 const CLERK_JS='https://cdn.jsdelivr.net/npm/@clerk/clerk-js@6.38.1/dist/clerk.browser.js';
 const CLERK_UI='https://cdn.jsdelivr.net/npm/@clerk/ui@1.39.1/dist/ui.browser.js'; // clerk-js 6 renders its components from @clerk/ui
 // SRI: these scripts see every session token, so a tampered CDN copy must not run (bump both hashes with the versions)
 const CLERK_JS_SRI='sha384-GGvezhr1z8BosGxc1db0emyOWcewf7nU9P2IhL/lzqQ8BVX0Jf1AVEXQDvjZuu1h';
 const CLERK_UI_SRI='sha384-JURm9wdjJAXgZgYoUr/he6OnzyOON7ft3Z9M9qaATJE3o2Za6+Bl77SNVSnlDIY0';
-/* ---------- Kiroku Cloud landing (clerk mode only): signed out, or #/about · /?about ---------- */
+/* ---------- Yanroku Cloud landing (clerk mode only): signed out, or #/about · /?about ---------- */
 const isAbout=()=>/^#\/about\b/.test(location.hash)||new URLSearchParams(location.search).has('about');
 // Clerk keeps a non-zero __client_uat (suffixed on dev instances) while a session may exist: without one, show the landing before Clerk loads
 const maybeSignedIn=()=>/(?:^|;\s*)__client_uat[^=]*=[1-9]/.test(document.cookie);

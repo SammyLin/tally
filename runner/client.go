@@ -27,10 +27,10 @@ func (e *httpError) Is(target error) bool {
 	return target == errLeaseLost && e.Status == http.StatusConflict
 }
 
-// client talks to the Worker API behind Cloudflare Access (service-token headers) and/or with a runner token (Kiroku Cloud).
+// client talks to the Worker API behind Cloudflare Access (service-token headers) and/or with a runner token (Yanroku Cloud).
 type client struct {
 	base, id, secret, runner string
-	token                    string // Kiroku Cloud runner token (Authorization: Bearer); empty for self-host
+	token                    string // Yanroku Cloud runner token (Authorization: Bearer); empty for self-host
 	hc                       *http.Client
 	attempts                 int
 	backoff                  time.Duration // first retry delay, doubled per attempt

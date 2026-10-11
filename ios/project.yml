@@ -14,7 +14,7 @@ settings:
     CURRENT_PROJECT_VERSION: 1 # app and extension must match
     MARKETING_VERSION: "1.0"
 packages:
-  Clerk: # Kiroku Cloud sign-in
+  Clerk: # Yanroku Cloud sign-in
     url: https://github.com/clerk/clerk-ios
     exactVersion: 1.6.1
 targets:
@@ -43,9 +43,9 @@ targets:
     info:
       path: Tally/Info.plist
       properties:
-        CFBundleDisplayName: Kiroku
+        CFBundleDisplayName: Yanroku
         CFBundleDevelopmentRegion: zh-Hant
-        NSMicrophoneUsageDescription: Kiroku 需要使用麥克風來錄音。
+        NSMicrophoneUsageDescription: Yanroku 需要使用麥克風來錄音。
         UIBackgroundModes: [audio]
         UILaunchScreen: {UIColorName: Paper} # brand ivory / ink navy, matches the first screen
         ITSAppUsesNonExemptEncryption: false
@@ -55,7 +55,7 @@ targets:
         NSAppTransportSecurity: {NSAllowsLocalNetworking: true}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-  KirokuShare: # 「存到 Kiroku」 in the share sheet: saves audio / video into the App Group inbox
+  KirokuShare: # 「存到 Yanroku」 in the share sheet: saves audio / video into the App Group inbox
     type: app-extension
     platform: iOS
     sources: [KirokuShare, Shared]
@@ -73,7 +73,7 @@ targets:
     info:
       path: KirokuShare/Info.plist
       properties:
-        CFBundleDisplayName: Kiroku
+        CFBundleDisplayName: Yanroku
         CFBundleDevelopmentRegion: zh-Hant
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services

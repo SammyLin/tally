@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// 「存到 Kiroku」 share extension: copies the shared audio / video files into the App Group inbox with a title,
+/// 「存到 Yanroku」 share extension: copies the shared audio / video files into the App Group inbox with a title,
 /// folder and language. It never uploads (extensions get little memory and time); the app queues the files the
 /// next time it becomes active.
 final class ShareViewController: UIViewController {
@@ -51,7 +51,7 @@ nonisolated struct StagedFile: Identifiable, Sendable {
     /// callback), so sizes are known and 儲存 only has to write the sidecar and rename.
     func load(_ providers: [NSItemProvider]) async {
         defer { loading = false }
-        guard let inbox = Inbox.directory else { error = "無法存取 Kiroku 的共用空間。"; return }
+        guard let inbox = Inbox.directory else { error = "無法存取 Yanroku 的共用空間。"; return }
         let media = providers.filter { Self.mediaType($0) != nil }
         skipped = max(0, media.count - Self.maxItems) + (providers.count - media.count)
         for p in media.prefix(Self.maxItems) {
@@ -77,7 +77,7 @@ nonisolated struct StagedFile: Identifiable, Sendable {
             return
         }
         saved = true
-        AccessibilityNotification.Announcement("已存到 Kiroku，開啟 App 後會上傳").post()
+        AccessibilityNotification.Announcement("已存到 Yanroku，開啟 App 後會上傳").post()
         Task {
             try? await Task.sleep(for: .seconds(1))
             finish(false)
@@ -128,7 +128,7 @@ struct ShareView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle("存到 Kiroku").kirokuChrome()
+                .navigationTitle("存到 Yanroku").kirokuChrome()
                 .navigationBarTitleDisplayMode(.inline)
                 .kirokuToolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -145,7 +145,7 @@ struct ShareView: View {
 
     @ViewBuilder private var content: some View {
         if model.saved {
-            ContentUnavailableView("已存到 Kiroku，開啟 App 後會上傳", systemImage: "checkmark.circle")
+            ContentUnavailableView("已存到 Yanroku，開啟 App 後會上傳", systemImage: "checkmark.circle")
                 .accessibilityIdentifier("share.done")
         } else {
             Form {

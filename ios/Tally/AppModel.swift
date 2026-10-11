@@ -8,13 +8,13 @@ import WebKit
 @Observable final class AppModel {
     enum Phase { case setup, main }
 
-    /// Kiroku Cloud (multi-user, Clerk sign-in). DEBUG runs can point it elsewhere with `-cloudURL http://127.0.0.1:8800`.
+    /// Yanroku Cloud (multi-user, Clerk sign-in). DEBUG runs can point it elsewhere with `-cloudURL http://127.0.0.1:8800`.
     static var cloudURL: URL { UserDefaults.standard.string(forKey: "cloudURL").flatMap(URL.init(string:)) ?? URL(string: "https://kiroku.3mi.ai")! }
 
     var phase: Phase
     var baseURL: URL?
     private(set) var token: String?
-    /// Signed in to Kiroku Cloud with Clerk: requests carry `Authorization: Bearer <session token>` instead of `cf-access-token`.
+    /// Signed in to Yanroku Cloud with Clerk: requests carry `Authorization: Bearer <session token>` instead of `cf-access-token`.
     private(set) var cloud = UserDefaults.standard.string(forKey: "backendMode") == "cloud"
     /// Access said our token is missing or expired; the UI shows the login screen.
     var needsLogin = false
@@ -183,7 +183,7 @@ import WebKit
         phase = .setup
     }
 
-    // MARK: Kiroku Cloud
+    // MARK: Yanroku Cloud
 
     private static var clerkConfigured = false
 
@@ -198,7 +198,7 @@ import WebKit
     /// GET /api/config on the cloud backend and set up Clerk. Returns true if a Clerk session already exists.
     func prepareCloud() async throws -> Bool {
         let cfg: ServerConfig = try await Backend(base: Self.cloudURL).get("api/config")
-        guard cfg.authMode == "clerk", let key = cfg.clerkPublishableKey else { throw APIError.http(0, "這個後端不是 Kiroku Cloud") }
+        guard cfg.authMode == "clerk", let key = cfg.clerkPublishableKey else { throw APIError.http(0, "這個後端不是 Yanroku Cloud") }
         Self.configureClerk(key)
         _ = try? await Clerk.shared.refreshClient()
         return Clerk.shared.session != nil

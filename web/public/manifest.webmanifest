@@ -1,6 +1,6 @@
 {
-  "name": "Kiroku 記錄",
-  "short_name": "Kiroku",
+  "name": "Yanroku 言錄",
+  "short_name": "Yanroku",
   "description": "錄音與匯入音訊，自動轉成分講者的逐字稿與摘要。",
   "lang": "zh-Hant",
   "start_url": "/#/recent",

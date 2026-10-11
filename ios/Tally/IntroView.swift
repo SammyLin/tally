@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// First launch, before the welcome screen: what Kiroku does, how a recording flows, where the data lives
+/// First launch, before the welcome screen: what Yanroku does, how a recording flows, where the data lives
 /// (web: the landing's 「運作方式」 and 「兩種用法」). Shown once; 設定 → 「再看一次介紹」 shows it again.
 struct IntroView: View {
     /// UserDefaults key: the intro has been finished or skipped.
@@ -25,7 +25,7 @@ struct IntroView: View {
             .padding(.horizontal, 12)
 
             TabView(selection: $page) {
-                IntroPage(lockup: true, title: "把對話記下來", text: "錄下會議、訪談或語音備忘錄，Kiroku 會轉成標好講者的逐字稿，再整理成摘要。") {
+                IntroPage(lockup: true, title: "把對話記下來", text: "錄下會議、訪談或語音備忘錄，Yanroku 會轉成標好講者的逐字稿，再整理成摘要。") {
                     WhatIllustration()
                 }
                 .tag(0)
@@ -96,7 +96,7 @@ private struct IntroPage<Art: View>: View {
     }
 }
 
-// MARK: Page 1 — what Kiroku does
+// MARK: Page 1 — what Yanroku does
 
 /// A seafoam → ivory sound wave flowing into transcript rows, one per speaker.
 private struct WhatIllustration: View {
@@ -135,7 +135,7 @@ private struct WhatIllustration: View {
 
 private struct FlowSteps: View {
     private let steps: [(icon: String, title: String, text: String)] = [
-        ("mic.fill", "錄音或匯入", "用 iPhone 錄，或從其他 App 分享音檔到 Kiroku。"),
+        ("mic.fill", "錄音或匯入", "用 iPhone 錄，或從其他 App 分享音檔到 Yanroku。"),
         ("person.2.fill", "逐字稿與講者", "轉成文字並分出講者；命名一次，之後依聲紋自動認出。"),
         ("doc.text.fill", "摘要", "選範本和語言，整理成一份摘要。"),
         ("questionmark.bubble.fill", "問問看", "對所有錄音一起提問，回答附上出處，點一下就從那句開始播。"),
@@ -185,7 +185,7 @@ private struct PlacesIllustration: View {
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(Color(.brandSeafoam))
                 .accessibilityHidden(true)
-            place(icon: "cloud.fill", title: "Kiroku Cloud", text: "註冊帳號就能開始；資料存在 Kiroku Cloud，轉錄和 AI 由我們處理。")
+            place(icon: "cloud.fill", title: "Yanroku Cloud", text: "註冊帳號就能開始；資料存在 Yanroku Cloud，轉錄和 AI 由我們處理。")
             place(icon: "server.rack", title: "自己的伺服器", text: "架在你的 Cloudflare 帳號，轉錄在你自己的 Mac 上跑；開源免費。")
             Text("同一個 App 兩種都能用，之後可在設定切換。兩邊資料各自獨立，不會互相搬移。")
                 .font(.footnote)

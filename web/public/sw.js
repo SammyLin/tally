@@ -1,7 +1,7 @@
-// Web Push only (no caching/offline): show the notification, focus or open Tally on click.
+// Web Push only (no caching/offline): show the notification, focus or open Yanroku on click.
 self.addEventListener('push',e=>{
   let m={};try{m=e.data.json()}catch{}
-  e.waitUntil(self.registration.showNotification(m.title||'Kiroku',
+  e.waitUntil(self.registration.showNotification(m.title||'Yanroku',
     {body:m.body||'',data:{url:m.url||'/'},icon:'/icon-192.png',badge:'/icon-192.png',tag:m.tag}));
 });
 self.addEventListener('notificationclick',e=>{

@@ -313,7 +313,7 @@ struct SettingsView: View {
 
     @ViewBuilder private var backendSections: some View {
         Section("連線方式") {
-            LabeledContent("目前使用", value: app.cloud ? "Kiroku Cloud" : "自己的伺服器")
+            LabeledContent("目前使用", value: app.cloud ? "Yanroku Cloud" : "自己的伺服器")
                 .accessibilityIdentifier("settings.mode")
             if app.cloud {
                 LabeledContent("帳號", value: Clerk.shared.user?.primaryEmailAddress?.emailAddress ?? "—")
@@ -344,7 +344,7 @@ struct SettingsView: View {
 
     /// Cloud and a self-hosted server are separate places: switching moves nothing (the upload queue follows the new connection).
     static func switchMessage(pending: Int) -> String {
-        "Kiroku Cloud 和自己的伺服器是兩個獨立的地方，切換不會搬移任何錄音、逐字稿、聲紋或設定。原本的資料留在原處，切回來就看得到。"
+        "Yanroku Cloud 和自己的伺服器是兩個獨立的地方，切換不會搬移任何錄音、逐字稿、聲紋或設定。原本的資料留在原處，切回來就看得到。"
             + (pending > 0 ? "\n\n還有 \(pending) 段錄音尚未上傳，切換後會上傳到新的連線。" : "")
     }
 

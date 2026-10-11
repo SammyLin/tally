@@ -25,7 +25,7 @@ type Config struct {
 	APIBase            string // Worker origin
 	AccessClientID     string // Cloudflare Access service token
 	AccessClientSecret string
-	RunnerToken        string // Kiroku Cloud: sent as Authorization: Bearer
+	RunnerToken        string // Yanroku Cloud: sent as Authorization: Bearer
 	RunnerName         string
 }
 

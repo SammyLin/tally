@@ -1,6 +1,6 @@
-# Tally for iOS
+# Yanroku for iOS
 
-SwiftUI app (iOS 17+; one dependency, Clerk's `clerk-ios` 1.6.1 via SPM for Kiroku Cloud sign-in) for the Tally backend. Features (same API as the web front end):
+SwiftUI app (iOS 17+; one dependency, Clerk's `clerk-ios` 1.6.1 via SPM for Yanroku Cloud sign-in) for the Yanroku backend. Features (same API as the web front end):
 
 - **Record**: keeps recording in the background and with the screen locked. You choose a title, folder and transcription language when you save.
 - **Upload queue**: multipart uploads in 50 MiB parts, retried until they succeed. Queued items can be deleted (asks first). You can also import audio/video files with a chosen language.
@@ -10,7 +10,7 @@ SwiftUI app (iOS 17+; one dependency, Clerk's `clerk-ios` 1.6.1 via SPM for Kiro
 - **問問看**: ask questions across recordings, answers cite recordings and jump to that time. Retry or delete questions.
 - **Settings**: AI text, default language, vocabulary (with suggestions and a 50-character limit; a rejected word keeps the sheet open), 我是誰, rename / merge / delete people, and change backend. Unsaved changes are guarded.
 - **`tally://` links**: see Links below.
-- **存到 Kiroku (share sheet)**: share audio or video (MP3, M4A, WAV, videos; up to 20 files) from Voice Memos, Files, LINE, Mail and so on, and pick **Kiroku**. You can set the title, folder and language, then tap 儲存. The extension only copies the files into the App Group; the app queues them for upload the next time it opens or comes to the foreground. See Share extension below.
+- **存到 Yanroku (share sheet)**: share audio or video (MP3, M4A, WAV, videos; up to 20 files) from Voice Memos, Files, LINE, Mail and so on, and pick **Yanroku**. You can set the title, folder and language, then tap 儲存. The extension only copies the files into the App Group; the app queues them for upload the next time it opens or comes to the foreground. See Share extension below.
 
 ## Build and run
 
@@ -50,7 +50,7 @@ followed by `/rec/<id>[/summary]` (or just `tally://rec/<id>[/summary][?ms=<ms>]
 The `KirokuShare` target (bundle ID `ai.3mi.tally.share`, embedded in the app) shows up in the share sheet for any audio or movie attachment. It hands files to the app through the App Group `group.ai.3mi.tally` (`Shared/Inbox.swift`, compiled into both targets):
 
 - The extension copies each file into `Inbox/.tmp-<uuid>/<original name>` as soon as it opens (this streams, so big files are fine). On 儲存 it writes `meta.json` (`{title, folder_id, language, created_at}`) and renames the folder to `Inbox/<uuid>/`. A folder without the `.tmp-` prefix is therefore always complete. 取消 deletes the copies. A killed extension's `.tmp-` folders are removed after a day.
-- The extension never uploads, because share extensions have tight memory and time limits. iOS doesn't let a share extension open its app, so the confirmation says 「已存到 Kiroku，開啟 App 後會上傳」.
+- The extension never uploads, because share extensions have tight memory and time limits. iOS doesn't let a share extension open its app, so the confirmation says 「已存到 Yanroku，開啟 App 後會上傳」.
 - The app (`UploadQueue.adoptInbox`, at launch and every time it becomes active) moves each file to `Documents/Imports/<uuid>/`, queues it with the sidecar's title, folder and language, and only then deletes the inbox entry. A missing or unreadable sidecar still queues the file under its own name. A file already moved by an earlier run isn't queued twice.
 - The app writes `folders.json` (the folder tree, whenever the library loads) and the default language (App Group defaults, whenever settings load) for the extension's pickers. Before the first load the extension shows only the title and language.
 
@@ -64,12 +64,12 @@ The `KirokuShare` target (bundle ID `ai.3mi.tally.share`, embedded in the app) s
 - When the token expires, the next 401/403 shows the login screen again, and the upload queue pauses until you sign in.
 - Settings → 連線方式 → 切換連線方式 logs you out and clears the web view's cookies. Items still in the upload queue start over on the new backend, in 未分類.
 
-## Login (Kiroku Cloud)
+## Login (Yanroku Cloud)
 
-- First launch shows a 3-page intro (`IntroView`: what Kiroku does / 錄音或匯入 → 逐字稿與講者 → 摘要 → 問問看 / Kiroku Cloud or
+- First launch shows a 3-page intro (`IntroView`: what Yanroku does / 錄音或匯入 → 逐字稿與講者 → 摘要 → 問問看 / Yanroku Cloud or
   your own server) before the welcome screen; finishing or 略過 sets UserDefaults `introSeen`. 設定 → 「再看一次介紹」 shows it again.
-- The welcome screen offers **使用 Kiroku Cloud** or **連線到自己的伺服器** (the self-hosted URL / Access path, unchanged),
-  plus 「兩者差別」 (https://kiroku.3mi.ai/?about#compare). 使用 Kiroku Cloud reads `GET /api/config` from https://kiroku.3mi.ai
+- The welcome screen offers **使用 Yanroku Cloud** or **連線到自己的伺服器** (the self-hosted URL / Access path, unchanged),
+  plus 「兩者差別」 (https://kiroku.3mi.ai/?about#compare). 使用 Yanroku Cloud reads `GET /api/config` from https://kiroku.3mi.ai
   (DEBUG override: launch argument `-cloudURL http://127.0.0.1:8800`) and configures Clerk with the returned publishable key;
   with an existing session it goes straight in, otherwise 註冊 / 登入 open Clerk's `AuthView` in `.signUp` / `.signIn`
   (email code; Apple / Google only if enabled on the Clerk instance). An expired session shows `.signIn`.

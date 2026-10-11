@@ -27,7 +27,7 @@ struct TallyApp: App {
 }
 
 /// First launch / 切換連線方式: two ways to use the same app (web: the landing's 「兩種用法」).
-/// Kiroku Cloud (Clerk account, sign up or sign in) or the user's own server (self-hosted, optionally behind Access).
+/// Yanroku Cloud (Clerk account, sign up or sign in) or the user's own server (self-hosted, optionally behind Access).
 struct ConnectView: View {
     @Environment(AppModel.self) private var app
     @State private var busy = false
@@ -55,7 +55,7 @@ struct ConnectView: View {
                     VStack(spacing: 14) {
                         cloudChoice
                         NavigationLink(value: "selfhost") {
-                            ChoiceLabel(title: "連線到自己的伺服器", subtitle: "輸入你架設的 Kiroku 網址", systemImage: "server.rack", primary: false)
+                            ChoiceLabel(title: "連線到自己的伺服器", subtitle: "輸入你架設的 Yanroku 網址", systemImage: "server.rack", primary: false)
                         }
                         .accessibilityIdentifier("connect.selfhost")
                         .disabled(busy)
@@ -83,7 +83,7 @@ struct ConnectView: View {
     @ViewBuilder private var cloudChoice: some View {
         VStack(spacing: 10) {
             Button(action: connectCloud) {
-                ChoiceLabel(title: "使用 Kiroku Cloud", subtitle: "註冊帳號，由我們代管儲存與處理", systemImage: "cloud", primary: true, busy: busy)
+                ChoiceLabel(title: "使用 Yanroku Cloud", subtitle: "註冊帳號，由我們代管儲存與處理", systemImage: "cloud", primary: true, busy: busy)
             }
             .accessibilityIdentifier("connect.cloud")
             .disabled(busy)
@@ -117,7 +117,7 @@ struct ConnectView: View {
             do {
                 if try await app.prepareCloud() { app.cloudSignedIn() } else { cloudChoices = true }
             } catch {
-                message = "無法連線到 Kiroku Cloud：\(error.localizedDescription)"
+                message = "無法連線到 Yanroku Cloud：\(error.localizedDescription)"
             }
         }
     }
@@ -177,7 +177,7 @@ struct SelfHostConnectView: View {
                 } header: {
                     Text("伺服器網址")
                 } footer: {
-                    Text("你自己架設的 Kiroku 網址。若有 Cloudflare Access 保護，下一步會請你登入。")
+                    Text("你自己架設的 Yanroku 網址。若有 Cloudflare Access 保護，下一步會請你登入。")
                 }
                 if let message {
                     Section { Text(message).foregroundStyle(Color(.danger)).accessibilityIdentifier("connect.error") }
@@ -204,7 +204,7 @@ struct SelfHostConnectView: View {
         .toolbar(.visible, for: .navigationBar)
         .kirokuNavyScreen()
         .onAppear {
-            // the last self-hosted server, never Kiroku Cloud's own URL
+            // the last self-hosted server, never Yanroku Cloud's own URL
             if address.isEmpty, let u = app.baseURL, u != AppModel.cloudURL { address = u.absoluteString }
         }
         .sheet(item: $loginURL) { url in
@@ -247,7 +247,7 @@ struct SelfHostConnectView: View {
     }
 }
 
-/// Kiroku Cloud sign-up / sign-in: Clerk's prebuilt AuthView (email code; Apple / Google if enabled on the Clerk instance).
+/// Yanroku Cloud sign-up / sign-in: Clerk's prebuilt AuthView (email code; Apple / Google if enabled on the Clerk instance).
 struct CloudSignIn: View {
     var mode: AuthView.Mode = .signIn
     let onDone: () -> Void
